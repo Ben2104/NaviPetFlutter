@@ -59,7 +59,11 @@ class ArNavigationScreen extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: const Color(0x33FFFFFF)),
               ),
-              child: const Icon(Icons.close, size: 22, color: AppColors.surface),
+              child: const Icon(
+                Icons.close,
+                size: 22,
+                color: AppColors.surface,
+              ),
             ),
           ),
           const SizedBox(width: AppSpacing.md),
@@ -77,7 +81,10 @@ class ArNavigationScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
           BoxShadow(
-              color: Color(0x33000000), blurRadius: 12, offset: Offset(0, 6)),
+            color: Color(0x33000000),
+            blurRadius: 12,
+            offset: Offset(0, 6),
+          ),
         ],
       ),
       child: Row(
@@ -86,45 +93,59 @@ class ArNavigationScreen extends StatelessWidget {
             width: 24,
             height: 24,
             decoration: const BoxDecoration(
-                color: AppColors.yellow, shape: BoxShape.circle),
-            child: const Icon(Icons.schedule, size: 15, color: AppColors.petInk),
+              color: AppColors.yellow,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.schedule,
+              size: 15,
+              color: AppColors.petInk,
+            ),
           ),
           const SizedBox(width: AppSpacing.md),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: const [
-              Text('ETA',
-                  style: TextStyle(
-                      fontSize: 11,
-                      letterSpacing: 0.5,
-                      color: Color(0xCCFFFFFF))),
-              Text('3 min',
-                  style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.surface)),
+              Text(
+                'ETA',
+                style: TextStyle(
+                  fontSize: 11,
+                  letterSpacing: 0.5,
+                  color: Color(0xCCFFFFFF),
+                ),
+              ),
+              Text(
+                '3 min',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.surface,
+                ),
+              ),
             ],
           ),
           const Spacer(),
-          Container(
-            width: 1,
-            height: 28,
-            color: const Color(0x33FFFFFF),
-          ),
+          Container(width: 1, height: 28, color: const Color(0x33FFFFFF)),
           const SizedBox(width: AppSpacing.md),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: const [
-              Text('NEXT',
-                  style: TextStyle(
-                      fontSize: 11,
-                      letterSpacing: 0.5,
-                      color: Color(0xCCFFFFFF))),
-              Text('GO STRAIGHT',
-                  style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.yellow)),
+              Text(
+                'NEXT',
+                style: TextStyle(
+                  fontSize: 11,
+                  letterSpacing: 0.5,
+                  color: Color(0xCCFFFFFF),
+                ),
+              ),
+              Text(
+                'GO STRAIGHT',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.yellow,
+                ),
+              ),
             ],
           ),
         ],
@@ -170,7 +191,11 @@ class ArNavigationScreen extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: [
-          BoxShadow(color: Color(0x14000000), blurRadius: 16, offset: Offset(0, -4)),
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 16,
+            offset: Offset(0, -4),
+          ),
         ],
       ),
       child: Column(
@@ -182,29 +207,36 @@ class ArNavigationScreen extends StatelessWidget {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                  color: AppColors.cardBorder,
-                  borderRadius: BorderRadius.circular(AppRadius.pill)),
+                color: AppColors.cardBorder,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('2D Top-Down',
-                  style: TextStyle(fontSize: 16, color: AppColors.petInk)),
+              const Text(
+                '2D Top-Down',
+                style: TextStyle(fontSize: 16, color: AppColors.petInk),
+              ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
-                    color: const Color(0xFFF3F3F4),
-                    borderRadius: BorderRadius.circular(AppRadius.pill)),
+                  color: const Color(0xFFF3F3F4),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
                 child: Row(
                   children: const [
                     Icon(Icons.circle, size: 8, color: AppColors.danger),
                     SizedBox(width: 6),
-                    Text('Live',
-                        style:
-                            TextStyle(fontSize: 13, color: AppColors.petInk)),
+                    Text(
+                      'Live',
+                      style: TextStyle(fontSize: 13, color: AppColors.petInk),
+                    ),
                   ],
                 ),
               ),
@@ -226,9 +258,7 @@ class ArNavigationScreen extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          Positioned.fill(
-            child: CustomPaint(painter: _DashedRoutePainter()),
-          ),
+          Positioned.fill(child: CustomPaint(painter: _DashedRoutePainter())),
           // Destination dot (top-right).
           const Positioned(
             top: 24,
@@ -240,16 +270,19 @@ class ArNavigationScreen extends StatelessWidget {
             left: 16,
             bottom: 48,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                  color: AppColors.petInk,
-                  borderRadius: BorderRadius.circular(10)),
-              child: const Text('Go Straight!',
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.surface)),
+                color: AppColors.petInk,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Text(
+                'Go Straight!',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.surface,
+                ),
+              ),
             ),
           ),
           // Pet marker (bottom).
@@ -260,7 +293,9 @@ class ArNavigationScreen extends StatelessWidget {
               width: 28,
               height: 28,
               decoration: const BoxDecoration(
-                  color: AppColors.yellow, shape: BoxShape.circle),
+                color: AppColors.yellow,
+                shape: BoxShape.circle,
+              ),
               child: const Icon(Icons.pets, size: 15, color: AppColors.petInk),
             ),
           ),
@@ -289,7 +324,11 @@ class ArNavigationScreen extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(10),
         boxShadow: const [
-          BoxShadow(color: Color(0x14000000), blurRadius: 4, offset: Offset(0, 2)),
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
         ],
       ),
       child: Icon(icon, size: 20, color: AppColors.petInk),

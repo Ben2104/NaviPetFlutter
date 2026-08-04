@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 
+import '../data/app_state.dart';
 import '../screens/account_settings_screen.dart';
 import '../screens/ar_navigation_screen.dart';
 import '../screens/checklist_screen.dart';
@@ -15,17 +16,18 @@ import '../screens/sign_in_screen.dart';
 /// overlay-style screens (Search, AR, Account) are opened with `context.push`
 /// so their back arrow / X pops back to the caller — matching the Figma
 /// prototype's user flow.
-final GoRouter appRouter = GoRouter(
-  initialLocation: '/signin',
+GoRouter createAppRouter(AppState appState) => GoRouter(
+  initialLocation: appState.isAuthenticated ? '/map' : '/signin',
+  refreshListenable: appState,
+  redirect: (context, state) {
+    final onSignIn = state.matchedLocation == '/signin';
+    if (!appState.isAuthenticated && !onSignIn) return '/signin';
+    if (appState.isAuthenticated && onSignIn) return '/map';
+    return null;
+  },
   routes: [
-    GoRoute(
-      path: '/signin',
-      builder: (context, state) => const SignInScreen(),
-    ),
-    GoRoute(
-      path: '/map',
-      builder: (context, state) => const MapScreen(),
-    ),
+    GoRoute(path: '/signin', builder: (context, state) => const SignInScreen()),
+    GoRoute(path: '/map', builder: (context, state) => const MapScreen()),
     GoRoute(
       path: '/pet',
       builder: (context, state) => const PetCustomizationScreen(),
@@ -34,10 +36,7 @@ final GoRouter appRouter = GoRouter(
       path: '/checklist',
       builder: (context, state) => const ChecklistScreen(),
     ),
-    GoRoute(
-      path: '/search',
-      builder: (context, state) => const SearchScreen(),
-    ),
+    GoRoute(path: '/search', builder: (context, state) => const SearchScreen()),
     GoRoute(
       path: '/account',
       builder: (context, state) => const AccountSettingsScreen(),

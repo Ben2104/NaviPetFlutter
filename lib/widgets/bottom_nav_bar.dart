@@ -58,11 +58,7 @@ class NaviBottomNav extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _iconButton(
-                  context,
-                  tab: NaviTab.menu,
-                  icon: Icons.menu,
-                ),
+                _iconButton(context, tab: NaviTab.menu, icon: Icons.menu),
                 const SizedBox(width: 64), // room for the centre FAB
                 _iconButton(
                   context,

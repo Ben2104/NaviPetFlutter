@@ -54,7 +54,11 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg, AppSpacing.xl, AppSpacing.lg, AppSpacing.xl),
+                AppSpacing.lg,
+                AppSpacing.xl,
+                AppSpacing.lg,
+                AppSpacing.xl,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -77,14 +81,20 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         color: AppColors.surface,
         border: Border(bottom: BorderSide(color: AppColors.divider)),
         boxShadow: [
-          BoxShadow(color: Color(0x0D000000), offset: Offset(0, 1), blurRadius: 1),
+          BoxShadow(
+            color: Color(0x0D000000),
+            offset: Offset(0, 1),
+            blurRadius: 1,
+          ),
         ],
       ),
       child: SafeArea(
         bottom: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -97,8 +107,11 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                     child: const SizedBox(
                       width: 40,
                       height: 40,
-                      child: Icon(Icons.arrow_back,
-                          size: 20, color: AppColors.petInk),
+                      child: Icon(
+                        Icons.arrow_back,
+                        size: 20,
+                        color: AppColors.petInk,
+                      ),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
@@ -124,8 +137,10 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                     border: Border.all(color: AppColors.surface, width: 2),
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: Image.asset('assets/images/shark_face.png',
-                      fit: BoxFit.cover),
+                  child: Image.asset(
+                    'assets/images/shark_face.png',
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
             ],
@@ -147,21 +162,23 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
               child: Text(
                 'Class Attainment\nChecklist',
                 style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    height: 1.4,
-                    color: Color(0xFF000F28)),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                  color: Color(0xFF000F28),
+                ),
               ),
             ),
             Text(
               '4/12\nCompleted',
               textAlign: TextAlign.right,
               style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  height: 1.33,
-                  letterSpacing: 0.48,
-                  color: AppColors.labelInk),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                height: 1.33,
+                letterSpacing: 0.48,
+                color: AppColors.labelInk,
+              ),
             ),
           ],
         ),
@@ -188,12 +205,16 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border(
           left: BorderSide(
-              color: active ? AppColors.yellow : AppColors.cardBorder,
-              width: 4),
+            color: active ? AppColors.yellow : AppColors.cardBorder,
+            width: 4,
+          ),
         ),
         boxShadow: const [
           BoxShadow(
-              color: Color(0x0F002A4E), offset: Offset(0, 2), blurRadius: 4),
+            color: Color(0x0F002A4E),
+            offset: Offset(0, 2),
+            blurRadius: 4,
+          ),
         ],
       ),
       child: Opacity(
@@ -206,17 +227,24 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(g.title,
-                    style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        height: 1.28,
-                        letterSpacing: 0.28,
-                        color: Color(0xFF000F28))),
+                Text(
+                  g.title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    height: 1.28,
+                    letterSpacing: 0.28,
+                    color: Color(0xFF000F28),
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text(g.subtitle,
-                    style: const TextStyle(
-                        fontSize: 14, color: AppColors.labelInk)),
+                Text(
+                  g.subtitle,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.labelInk,
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.sm),
                 _pips(g.filled, g.total),
               ],
@@ -250,11 +278,14 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Daily Tasks',
-            style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF000F28))),
+        const Text(
+          'Daily Tasks',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF000F28),
+          ),
+        ),
         const SizedBox(height: AppSpacing.lg),
         Container(
           decoration: BoxDecoration(
@@ -262,7 +293,10 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
             borderRadius: BorderRadius.circular(12),
             boxShadow: const [
               BoxShadow(
-                  color: Color(0x0F002A4E), blurRadius: 8, offset: Offset(0, 2)),
+                color: Color(0x0F002A4E),
+                blurRadius: 8,
+                offset: Offset(0, 2),
+              ),
             ],
           ),
           clipBehavior: Clip.antiAlias,
@@ -294,7 +328,8 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                 color: task.done ? AppColors.petInk : AppColors.surface,
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
-                    color: task.done ? AppColors.petInk : AppColors.fieldIcon),
+                  color: task.done ? AppColors.petInk : AppColors.fieldIcon,
+                ),
               ),
               child: task.done
                   ? const Icon(Icons.check, size: 16, color: AppColors.surface)
@@ -308,8 +343,9 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
               style: TextStyle(
                 fontSize: 16,
                 color: task.done ? AppColors.fieldIcon : AppColors.taskInk,
-                decoration:
-                    task.done ? TextDecoration.lineThrough : TextDecoration.none,
+                decoration: task.done
+                    ? TextDecoration.lineThrough
+                    : TextDecoration.none,
               ),
             ),
           ),
@@ -324,7 +360,9 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
       return Container(
         padding: const EdgeInsets.all(6),
         decoration: const BoxDecoration(
-            color: AppColors.cardBorder, shape: BoxShape.circle),
+          color: AppColors.cardBorder,
+          shape: BoxShape.circle,
+        ),
         child: const Icon(Icons.check, size: 12, color: AppColors.fieldIcon),
       );
     }
@@ -339,12 +377,15 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         children: [
           const Icon(Icons.diamond, size: 12, color: AppColors.blue),
           const SizedBox(width: 4),
-          Text('+${task.reward}',
-              style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.48,
-                  color: AppColors.gemInk)),
+          Text(
+            '+${task.reward}',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.48,
+              color: AppColors.gemInk,
+            ),
+          ),
         ],
       ),
     );

@@ -66,7 +66,11 @@ class _PetCustomizationScreenState extends State<PetCustomizationScreen> {
       decoration: const BoxDecoration(
         color: AppColors.surface,
         boxShadow: [
-          BoxShadow(color: Color(0x0D000000), offset: Offset(0, 1), blurRadius: 1),
+          BoxShadow(
+            color: Color(0x0D000000),
+            offset: Offset(0, 1),
+            blurRadius: 1,
+          ),
         ],
       ),
       child: Row(
@@ -74,11 +78,16 @@ class _PetCustomizationScreenState extends State<PetCustomizationScreen> {
         children: [
           Row(
             children: const [
-              Icon(Icons.sentiment_satisfied_outlined,
-                  size: 20, color: AppColors.petInk),
+              Icon(
+                Icons.sentiment_satisfied_outlined,
+                size: 20,
+                color: AppColors.petInk,
+              ),
               SizedBox(width: AppSpacing.sm),
-              Text('Elbee',
-                  style: TextStyle(fontSize: 16, color: AppColors.petInk)),
+              Text(
+                'Elbee',
+                style: TextStyle(fontSize: 16, color: AppColors.petInk),
+              ),
             ],
           ),
           Container(
@@ -91,8 +100,10 @@ class _PetCustomizationScreenState extends State<PetCustomizationScreen> {
               children: const [
                 Icon(Icons.diamond_outlined, size: 14, color: AppColors.blue),
                 SizedBox(width: 4),
-                Text('\$1,250',
-                    style: TextStyle(fontSize: 16, color: AppColors.petInk)),
+                Text(
+                  '\$1,250',
+                  style: TextStyle(fontSize: 16, color: AppColors.petInk),
+                ),
               ],
             ),
           ),
@@ -121,17 +132,9 @@ class _PetCustomizationScreenState extends State<PetCustomizationScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _pill(
-              label: 'Current Look',
-              filled: true,
-              onTap: () {},
-            ),
+            _pill(label: 'Current Look', filled: true, onTap: () {}),
             const SizedBox(width: AppSpacing.sm),
-            _pill(
-              label: 'Save Outfit',
-              filled: false,
-              onTap: () {},
-            ),
+            _pill(label: 'Save Outfit', filled: false, onTap: () {}),
           ],
         ),
       ],
@@ -153,7 +156,10 @@ class _PetCustomizationScreenState extends State<PetCustomizationScreen> {
           border: filled ? null : Border.all(color: AppColors.petInk, width: 2),
           boxShadow: const [
             BoxShadow(
-                color: Color(0x0D000000), offset: Offset(0, 1), blurRadius: 1),
+              color: Color(0x0D000000),
+              offset: Offset(0, 1),
+              blurRadius: 1,
+            ),
           ],
         ),
         child: Text(
@@ -174,10 +180,14 @@ class _PetCustomizationScreenState extends State<PetCustomizationScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: const [
-            Text('OUTFITS',
-                style: TextStyle(fontSize: 16, color: AppColors.petInk)),
-            Text('See All',
-                style: TextStyle(fontSize: 16, color: AppColors.fieldIcon)),
+            Text(
+              'OUTFITS',
+              style: TextStyle(fontSize: 16, color: AppColors.petInk),
+            ),
+            Text(
+              'See All',
+              style: TextStyle(fontSize: 16, color: AppColors.fieldIcon),
+            ),
           ],
         ),
         const SizedBox(height: AppSpacing.lg),
@@ -188,9 +198,7 @@ class _PetCustomizationScreenState extends State<PetCustomizationScreen> {
           mainAxisSpacing: AppSpacing.lg,
           crossAxisSpacing: AppSpacing.lg,
           childAspectRatio: 1.02,
-          children: [
-            for (var i = 0; i < _outfits.length; i++) _outfitCard(i),
-          ],
+          children: [for (var i = 0; i < _outfits.length; i++) _outfitCard(i)],
         ),
       ],
     );
@@ -211,7 +219,10 @@ class _PetCustomizationScreenState extends State<PetCustomizationScreen> {
           ),
           boxShadow: const [
             BoxShadow(
-                color: Color(0x0D000000), offset: Offset(0, 1), blurRadius: 1),
+              color: Color(0x0D000000),
+              offset: Offset(0, 1),
+              blurRadius: 1,
+            ),
           ],
         ),
         child: Stack(
@@ -222,9 +233,13 @@ class _PetCustomizationScreenState extends State<PetCustomizationScreen> {
                 children: [
                   Icon(outfit.icon, size: 34, color: AppColors.petInk),
                   const SizedBox(height: AppSpacing.sm),
-                  Text(outfit.label,
-                      style: const TextStyle(
-                          fontSize: 16, color: AppColors.petInk)),
+                  Text(
+                    outfit.label,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: AppColors.petInk,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -239,8 +254,11 @@ class _PetCustomizationScreenState extends State<PetCustomizationScreen> {
                     color: AppColors.yellow,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.check,
-                      size: 14, color: AppColors.petInk),
+                  child: const Icon(
+                    Icons.check,
+                    size: 14,
+                    color: AppColors.petInk,
+                  ),
                 ),
               ),
           ],

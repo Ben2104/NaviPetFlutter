@@ -1,37 +1,56 @@
-// Unit tests for NaviPet app state.
-//
-// These cover the sign-in logic ported from the RN AppState. Widget/integration
-// tests that exercise the Mapbox map are intentionally omitted for now (the
-// native map requires platform channels not available in the test harness).
-
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:navipet/data/app_state.dart';
-import 'package:navipet/data/mock_data.dart';
+import 'package:navipet/data/navigation_models.dart';
 
 void main() {
-  group('AppState.signIn', () {
-    test('defaults to the first user', () {
+  group('AppState without backend configuration', () {
+    test('starts signed out and reports missing Supabase configuration', () {
       final state = AppState();
-      expect(state.activeUser.id, users.first.id);
+      addTearDown(state.dispose);
+
+      expect(state.isSupabaseConfigured, isFalse);
+      expect(state.isAuthenticated, isFalse);
+      expect(state.activeUser, isNull);
     });
 
-    test('matches a known user by email (case-insensitive)', () {
+    test('returns a useful failure instead of pretending to sign in', () async {
       final state = AppState();
-      state.signIn('MAYA@csulb.edu');
-      expect(state.activeUser.email, 'maya@csulb.edu');
+      addTearDown(state.dispose);
+
+      final result = await state.signIn(
+        email: 'person@example.com',
+        password: 'password',
+      );
+
+      expect(result.status, AuthActionStatus.failure);
+      expect(result.message, contains('Supabase is not configured'));
+    });
+  });
+
+  group('NavigationRoute labels', () {
+    test('formats a short walking route', () {
+      const route = NavigationRoute(
+        coordinates: [],
+        steps: [],
+        distanceMeters: 30,
+        durationSeconds: 301,
+      );
+
+      expect(route.distanceLabel, '98 ft');
+      expect(route.durationLabel, '6 min');
     });
 
-    test('falls back to the first user for an unknown email', () {
-      final state = AppState();
-      state.signIn('nobody@example.com');
-      expect(state.activeUser.id, users.first.id);
-    });
+    test('formats a longer route', () {
+      const route = NavigationRoute(
+        coordinates: [],
+        steps: [],
+        distanceMeters: 3218.688,
+        durationSeconds: 3900,
+      );
 
-    test('guest email selects the Guest Explorer account', () {
-      final state = AppState();
-      state.signIn('guest@navipet.app');
-      expect(state.activeUser.name, 'Guest Explorer');
+      expect(route.distanceLabel, '2.0 mi');
+      expect(route.durationLabel, '1 hr 5 min');
     });
   });
 }
