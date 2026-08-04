@@ -100,6 +100,77 @@ flutter run
 The first build can take several minutes. The app will request location access
 when the map opens; precise location is needed for route guidance and rerouting.
 
+## Run on an iPhone
+
+iPhone builds require **macOS and Xcode**. They cannot be compiled or installed
+from Windows. Make sure `.env` contains the Mapbox and Supabase values described
+above. The secret `MAPBOX_DOWNLOADS_TOKEN` is only needed for Android; iOS uses
+the public Mapbox token from `.env`.
+
+Avoid building the project from an iCloud-synced Desktop or Documents folder.
+iCloud metadata can cause iOS code signing to fail. A path such as
+`~/Development/NaviPetFlutter` is safer.
+
+### iOS Simulator
+
+1. Install Xcode from the Mac App Store and finish its first-run setup:
+
+   ```bash
+   sudo xcodebuild -runFirstLaunch
+   ```
+
+2. Open a simulator and run the app from the project root:
+
+   ```bash
+   open -a Simulator
+   flutter pub get
+   flutter devices
+   flutter run
+   ```
+
+3. If Flutter lists multiple targets, select the simulator explicitly:
+
+   ```bash
+   flutter run -d "iPhone 16 Pro"
+   ```
+
+The first iOS build can take several minutes while Xcode resolves the native
+Mapbox packages. A simulator can test the UI, authentication, search, and route
+preview, but a physical iPhone is better for testing live GPS navigation.
+
+### Physical iPhone
+
+1. Connect the unlocked iPhone to the Mac with a data-capable cable.
+2. Tap **Trust** if the iPhone asks whether to trust the computer.
+3. On iOS 16 or later, enable **Settings > Privacy & Security > Developer Mode**
+   if prompted, then restart the iPhone.
+4. Open the iOS workspace:
+
+   ```bash
+   open ios/Runner.xcworkspace
+   ```
+
+5. In Xcode, select **Runner > Signing & Capabilities**:
+   - Choose your Apple development team.
+   - If Xcode reports that the bundle identifier is unavailable, replace it with
+     a unique value such as `com.yourname.navipet`.
+   - Let Xcode create or update the development signing certificate.
+6. Select the connected iPhone once in Xcode and allow any requested device
+   preparation to finish.
+7. Return to the terminal and run:
+
+   ```bash
+   flutter devices
+   flutter run -d <iphone-device-id>
+   ```
+
+8. Approve the location request when NaviPet opens. Select precise location so
+   route guidance and rerouting can use an accurate GPS position.
+
+A free Apple ID can be used for development testing, although its signing has
+more restrictions. App Store or TestFlight distribution requires membership in
+the Apple Developer Program.
+
 ## Navigation behavior
 
 The app stays on Mapbox for this phase. It uses the native Maps Flutter SDK for
@@ -140,6 +211,9 @@ build\app\outputs\flutter-apk\app-debug.apk
 | Current location is unavailable | Enable precise location for NaviPet and turn on the phone's Location Services. |
 | Route is not found | Walking directions require a Mapbox-routable origin and destination; try a nearby street entrance. |
 | `cmdline-tools` is missing | Install Android SDK Command-line Tools in Android Studio, then run `flutter doctor --android-licenses`. |
+| No iPhones or simulators are listed | Open Xcode, install an iOS runtime in **Xcode > Settings > Platforms**, then run `open -a Simulator` and `flutter devices`. |
+| Xcode reports a signing error | Select a development team under **Runner > Signing & Capabilities** and use a unique bundle identifier. |
+| iOS reports resource-fork/Finder metadata errors | Move the repository out of an iCloud-synced Desktop or Documents folder, then run `flutter clean` and try again. |
 
 The Kotlin Gradle Plugin warning currently emitted by Mapbox/Flutter TTS is a
 forward-compatibility warning from those plugins; the Android build succeeds on
