@@ -14,22 +14,39 @@ includes:
 
 ## Project structure
 
+Detailed file ownership and collaboration guidance is available in
+[docs/PROJECT_MAP.md](docs/PROJECT_MAP.md).
+
 ```text
+FRONTEND
+lib/screens/                       Complete Flutter screens
+lib/widgets/                       Reusable UI components
+lib/theme/                         Visual design tokens
+lib/router/                        App navigation and redirects
+assets/                            Images and fonts
+
+CLIENT SERVICES + SHARED MODELS
 lib/
   main.dart                         App initialization
   data/
     app_config.dart                 Safe runtime configuration checks
-    app_state.dart                  Supabase auth/session/profile state
+    app_state.dart                  Supabase auth, classes, and task state
+    course_class.dart               Class schedule and generated-task models
+    search_history_store.dart       On-device recent destination history
     user_account.dart               Authenticated profile model
     mapbox_config.dart              Mapbox token and campus defaults
     mapbox_navigation_service.dart  Search Box + Directions API client
     navigation_models.dart          Destination, route, and maneuver models
-  router/app_router.dart            Auth-aware go_router configuration
-  screens/
-    sign_in_screen.dart             Sign in, create, reset, and guest actions
-    search_screen.dart              Live destination autocomplete
-    map_screen.dart                 GPS, route preview, and guided navigation
-supabase/schema.sql                 Profiles table, trigger, and RLS policies
+
+BACKEND
+supabase/schema.sql                 Profiles, classes, completions, and RLS
+Supabase Auth                       Accounts, sessions, and password recovery
+
+PLATFORM + BUILD
+android/                            Android native and Gradle configuration
+ios/                                iOS native and Xcode configuration
+pubspec.yaml                        Dependencies, assets, and app version
+test/                               Automated tests
 ```
 
 ## Prerequisites
@@ -72,8 +89,9 @@ MAPBOX_DOWNLOADS_TOKEN=sk.your_download_token
 
 1. Create a Supabase project.
 2. Open **SQL Editor**, paste [supabase/schema.sql](supabase/schema.sql), and run
-   it once. This creates the `profiles` table, a new-user trigger, and Row Level
-   Security policies.
+   it once. This creates the profile, class, and completion tables, the
+   new-user trigger, and Row Level Security policies. If you ran an older copy,
+   run the entire file again; it is safe to re-run and adds the new tables.
 3. In **Authentication > Providers**, keep Email enabled.
 4. Enable anonymous sign-ins if **Continue as Guest** should work.
 5. Decide whether new users must confirm their email. NaviPet handles both
@@ -82,8 +100,9 @@ MAPBOX_DOWNLOADS_TOKEN=sk.your_download_token
 6. Copy the Project URL and publishable key from Supabase's **Connect** panel into
    `.env`.
 
-Supabase Auth owns passwords and sessions. The public `profiles` table stores
-only NaviPet data such as display name, gems, level, and avatar color.
+Supabase Auth owns passwords and sessions. `profiles` stores app-facing account
+data, `classes` stores each user's schedule and locations, and
+`task_completions` stores daily progress. Owner-only policies protect each row.
 
 ## Run on an Android phone
 
@@ -182,8 +201,9 @@ it as safety-critical or shipping it broadly, add integration/device tests for
 GPS loss, background execution, route deviations, network loss, accessibility,
 and battery use. Do not rely on it for emergency navigation.
 
-Mapbox search results are treated as temporary session data and are not stored
-in Supabase.
+The three most recent selected destinations are kept only on the phone and can
+be cleared from Search. They are not uploaded to Supabase. Class locations are
+stored in Supabase so Search can adapt to a user's schedule across devices.
 
 ## Verification
 

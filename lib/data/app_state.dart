@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'course_class.dart';
 import 'user_account.dart';
 
 /// App-wide authentication and profile state backed by Supabase.
@@ -24,12 +25,128 @@ class AppState extends ChangeNotifier {
   UserAccount? _activeUser;
   bool _busy = false;
   String? _errorMessage;
+  List<CourseClass> _classes = const [];
+  Set<String> _completionKeys = const {};
+  Map<String, int> _completionCounts = const {};
+  bool _classesBusy = false;
 
   bool get isSupabaseConfigured => _supabase != null;
   bool get isAuthenticated => _supabase?.auth.currentSession != null;
   bool get isBusy => _busy;
   String? get errorMessage => _errorMessage;
   UserAccount? get activeUser => _activeUser;
+  List<CourseClass> get classes => List.unmodifiable(_classes);
+  bool get classesBusy => _classesBusy;
+
+  List<DailyClassTask> dailyTasks([DateTime? day]) {
+    final date = day ?? DateTime.now();
+    final scheduled = _classes.where((course) => course.occursOn(date.weekday));
+    final source = scheduled.isEmpty ? _classes.take(3) : scheduled;
+    return source.map((course) {
+      final kind = scheduled.isEmpty ? 'prepare' : 'attend';
+      return DailyClassTask(
+        course: course,
+        kind: kind,
+        label: kind == 'attend'
+            ? 'Go to ${course.locationLabel} for ${course.courseCode}'
+            : 'Prepare for ${course.courseCode}',
+        reward: kind == 'attend' ? 10 : 5,
+        done: _completionKeys.contains(
+          dailyCompletionKey(course.id, date, kind),
+        ),
+      );
+    }).toList();
+  }
+
+  int completionCountFor(String classId) => _completionCounts[classId] ?? 0;
+
+  Future<void> refreshClasses() async {
+    final client = _supabase;
+    final user = client?.auth.currentUser;
+    if (client == null || user == null) return;
+    _classesBusy = true;
+    notifyListeners();
+    try {
+      final classRows = await client
+          .from('classes')
+          .select()
+          .eq('user_id', user.id)
+          .order('start_time');
+      final completionRows = await client
+          .from('task_completions')
+          .select('class_id, task_date, task_kind')
+          .eq('user_id', user.id);
+      _classes = (classRows as List<dynamic>)
+          .map((row) => CourseClass.fromJson(row as Map<String, dynamic>))
+          .toList();
+      final keys = <String>{};
+      final counts = <String, int>{};
+      for (final value in completionRows as List<dynamic>) {
+        final row = value as Map<String, dynamic>;
+        final classId = row['class_id'].toString();
+        keys.add('$classId|${row['task_date']}|${row['task_kind']}');
+        counts[classId] = (counts[classId] ?? 0) + 1;
+      }
+      _completionKeys = keys;
+      _completionCounts = counts;
+    } on PostgrestException catch (error) {
+      _errorMessage = error.message;
+    } finally {
+      _classesBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> saveClass(CourseClassInput input) async {
+    final client = _requireClient();
+    final user = client.auth.currentUser;
+    if (user == null) throw StateError('Sign in before adding a class.');
+    _classesBusy = true;
+    notifyListeners();
+    try {
+      final values = input.toJson(user.id);
+      if (input.id == null) {
+        await client.from('classes').insert(values);
+      } else {
+        await client.from('classes').update(values).eq('id', input.id!);
+      }
+      await refreshClasses();
+    } finally {
+      _classesBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteClass(String id) async {
+    await _requireClient().from('classes').delete().eq('id', id);
+    await refreshClasses();
+  }
+
+  Future<void> toggleTask(DailyClassTask task, DateTime date) async {
+    final client = _requireClient();
+    final user = client.auth.currentUser;
+    if (user == null) return;
+    final dateText = '${date.year.toString().padLeft(4, '0')}-'
+        '${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
+    if (task.done) {
+      await client
+          .from('task_completions')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('class_id', task.course.id)
+          .eq('task_date', dateText)
+          .eq('task_kind', task.kind);
+    } else {
+      await client.from('task_completions').insert({
+        'user_id': user.id,
+        'class_id': task.course.id,
+        'task_date': dateText,
+        'task_kind': task.kind,
+      });
+    }
+    await refreshClasses();
+  }
 
   Future<AuthActionResult> signIn({
     required String email,
@@ -136,6 +253,9 @@ class AppState extends ChangeNotifier {
   Future<void> _applyUser(User? user) async {
     if (user == null) {
       _activeUser = null;
+      _classes = const [];
+      _completionKeys = const {};
+      _completionCounts = const {};
       notifyListeners();
       return;
     }
@@ -154,6 +274,7 @@ class AppState extends ChangeNotifier {
 
     _activeUser = UserAccount.fromSupabase(user, profile: profile);
     notifyListeners();
+    await refreshClasses();
   }
 
   void _setBusy(bool value) {
