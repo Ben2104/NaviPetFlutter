@@ -1,352 +1,209 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
+import '../data/app_state.dart';
+import '../data/course_class.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bottom_nav_bar.dart';
+import '../widgets/class_editor_sheet.dart';
 
-/// Class Checklist screen, cloned from the Figma "List" frame (node 17:201).
-/// A "Class Attainment Checklist" card grid plus a "Daily Tasks" list with gem
-/// rewards. The top-right avatar routes to Account Settings (prototype wiring).
-class ChecklistScreen extends StatefulWidget {
+class ChecklistScreen extends StatelessWidget {
   const ChecklistScreen({super.key});
 
-  @override
-  State<ChecklistScreen> createState() => _ChecklistScreenState();
-}
-
-class _Goal {
-  const _Goal(this.icon, this.title, this.subtitle, this.filled, this.total);
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final int filled;
-  final int total;
-}
-
-class _Task {
-  _Task(this.label, this.reward, {this.done = false});
-  final String label;
-  final int reward; // 0 => no gem reward shown
-  bool done;
-}
-
-class _ChecklistScreenState extends State<ChecklistScreen> {
-  static const _goals = [
-    _Goal(Icons.school_outlined, 'Attend Lecture', 'CS 328', 3, 5),
-    _Goal(Icons.local_library_outlined, 'Library Study', '2 Hours', 1, 3),
-    _Goal(Icons.people_outline, 'Group Project', 'Meeting', 0, 2),
-    _Goal(Icons.edit_outlined, 'Submit\nAssignment', 'Math 101', 2, 3),
-  ];
-
-  final _tasks = [
-    _Task('Go to VEC 518', 5),
-    _Task('Go to VEC 330', 0, done: true),
-    _Task('Go to ECS 105', 10),
-  ];
+  void _edit(BuildContext context, [CourseClass? course]) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: AppColors.surface,
+      builder: (_) => ChangeNotifierProvider.value(
+        value: context.read<AppState>(),
+        child: ClassEditorSheet(course: course),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final tasks = state.dailyTasks();
     return Scaffold(
       backgroundColor: AppColors.screenBg,
-      body: Column(
-        children: [
-          _header(context),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg, AppSpacing.xl, AppSpacing.lg, AppSpacing.xl),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _checklistSection(),
-                  const SizedBox(height: AppSpacing.xl),
-                  _dailyTasksSection(),
-                ],
-              ),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        leading: IconButton(
+          onPressed: () => context.canPop() ? context.pop() : context.go('/map'),
+          icon: const Icon(Icons.arrow_back),
+        ),
+        title: const Text('Achievements'),
+        actions: [
+          IconButton(
+            tooltip: 'Add class',
+            onPressed: () => _edit(context),
+            icon: const Icon(Icons.add_circle, color: AppColors.petInk),
+          ),
+          IconButton(
+            onPressed: () => context.push('/account'),
+            icon: const CircleAvatar(
+              radius: 16,
+              backgroundImage: AssetImage('assets/images/shark_face.png'),
             ),
           ),
+          const SizedBox(width: 8),
         ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: state.refreshClasses,
+        child: ListView(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          children: [
+            _intro(context),
+            const SizedBox(height: 24),
+            _sectionTitle('Class achievements', '${state.classes.length} classes'),
+            const SizedBox(height: 12),
+            if (state.classesBusy && state.classes.isEmpty)
+              const Center(child: CircularProgressIndicator())
+            else if (state.classes.isEmpty)
+              _emptyClasses(context)
+            else
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: .9,
+                ),
+                itemCount: state.classes.length,
+                itemBuilder: (_, index) => _achievementCard(
+                  context,
+                  state.classes[index],
+                  state.completionCountFor(state.classes[index].id),
+                ),
+              ),
+            const SizedBox(height: 28),
+            _sectionTitle(
+              'Daily tasks',
+              '${tasks.where((task) => task.done).length}/${tasks.length} done',
+            ),
+            const SizedBox(height: 12),
+            if (tasks.isEmpty)
+              const Text('Add a class to create personalized daily tasks.')
+            else
+              _taskList(context, state, tasks),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _edit(context),
+        backgroundColor: AppColors.yellow,
+        foregroundColor: AppColors.petInk,
+        icon: const Icon(Icons.add),
+        label: const Text('Add class'),
       ),
       bottomNavigationBar: const NaviBottomNav(active: NaviTab.menu),
     );
   }
 
-  Widget _header(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(bottom: BorderSide(color: AppColors.divider)),
-        boxShadow: [
-          BoxShadow(color: Color(0x0D000000), offset: Offset(0, 1), blurRadius: 1),
-        ],
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _intro(BuildContext context) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: AppColors.petInk,
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: const Row(
+      children: [
+        CircleAvatar(
+          radius: 27,
+          backgroundColor: AppColors.yellow,
+          backgroundImage: AssetImage('assets/images/shark_side.png'),
+        ),
+        SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () =>
-                        context.canPop() ? context.pop() : context.go('/map'),
-                    child: const SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: Icon(Icons.arrow_back,
-                          size: 20, color: AppColors.petInk),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  const Text(
-                    'NaviPet',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF000F28),
-                      letterSpacing: -0.24,
-                    ),
-                  ),
-                ],
-              ),
-              GestureDetector(
-                onTap: () => context.push('/account'),
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8E8E8),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.surface, width: 2),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Image.asset('assets/images/shark_face.png',
-                      fit: BoxFit.cover),
-                ),
-              ),
+              Text('Your class journey', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 17)),
+              SizedBox(height: 4),
+              Text('Complete class-aware tasks to grow your achievements.', style: TextStyle(color: Color(0xFFD9E6F4), fontSize: 12)),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _checklistSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Expanded(
-              child: Text(
-                'Class Attainment\nChecklist',
-                style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    height: 1.4,
-                    color: Color(0xFF000F28)),
-              ),
-            ),
-            Text(
-              '4/12\nCompleted',
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  height: 1.33,
-                  letterSpacing: 0.48,
-                  color: AppColors.labelInk),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          mainAxisSpacing: AppSpacing.sm,
-          crossAxisSpacing: AppSpacing.sm,
-          childAspectRatio: 0.9,
-          children: [for (final g in _goals) _goalCard(g)],
-        ),
       ],
-    );
-  }
+    ),
+  );
 
-  Widget _goalCard(_Goal g) {
-    final active = g.filled > 0;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border(
-          left: BorderSide(
-              color: active ? AppColors.yellow : AppColors.cardBorder,
-              width: 4),
-        ),
-        boxShadow: const [
-          BoxShadow(
-              color: Color(0x0F002A4E), offset: Offset(0, 2), blurRadius: 4),
-        ],
-      ),
-      child: Opacity(
-        opacity: active ? 1 : 0.8,
+  Widget _sectionTitle(String title, String detail) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.petInk)),
+      Text(detail, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+    ],
+  );
+
+  Widget _emptyClasses(BuildContext context) => InkWell(
+    onTap: () => _edit(context),
+    borderRadius: BorderRadius.circular(14),
+    child: Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.cardBorder)),
+      child: const Column(children: [
+        Icon(Icons.school_outlined, size: 38, color: AppColors.petInk),
+        SizedBox(height: 8),
+        Text('Add your first class', style: TextStyle(fontWeight: FontWeight.w700)),
+        Text('Your tasks, achievements, and nearby places will adapt automatically.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+      ]),
+    ),
+  );
+
+  Widget _achievementCard(BuildContext context, CourseClass course, int count) {
+    final progress = count.clamp(0, 5);
+    return InkWell(
+      onTap: () => _edit(context, course),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: const Border(left: BorderSide(color: AppColors.yellow, width: 4)), boxShadow: AppShadows.soft),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(g.icon, size: 28, color: AppColors.petInk),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(g.title,
-                    style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        height: 1.28,
-                        letterSpacing: 0.28,
-                        color: Color(0xFF000F28))),
-                const SizedBox(height: 4),
-                Text(g.subtitle,
-                    style: const TextStyle(
-                        fontSize: 14, color: AppColors.labelInk)),
-                const SizedBox(height: AppSpacing.sm),
-                _pips(g.filled, g.total),
-              ],
-            ),
+            const Icon(Icons.workspace_premium_outlined, size: 30, color: AppColors.petInk),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(course.courseCode, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              Text(course.courseName, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+              const SizedBox(height: 10),
+              Row(children: List.generate(5, (index) => Expanded(child: Container(height: 7, margin: EdgeInsets.only(right: index == 4 ? 0 : 3), decoration: BoxDecoration(color: index < progress ? AppColors.yellow : AppColors.cardBorder, borderRadius: BorderRadius.circular(8)))))),
+              const SizedBox(height: 6),
+              Text('$count tasks completed · Tap to edit', style: const TextStyle(fontSize: 10, color: AppColors.faint)),
+            ]),
           ],
         ),
       ),
     );
   }
 
-  Widget _pips(int filled, int total) {
-    return Row(
-      children: [
-        for (var i = 0; i < total; i++) ...[
-          Expanded(
-            child: Container(
-              height: 8,
-              decoration: BoxDecoration(
-                color: i < filled ? AppColors.yellow : AppColors.cardBorder,
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-              ),
-            ),
-          ),
-          if (i != total - 1) const SizedBox(width: 4),
-        ],
-      ],
-    );
-  }
-
-  Widget _dailyTasksSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Daily Tasks',
-            style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF000F28))),
-        const SizedBox(height: AppSpacing.lg),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: const [
-              BoxShadow(
-                  color: Color(0x0F002A4E), blurRadius: 8, offset: Offset(0, 2)),
-            ],
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              for (var i = 0; i < _tasks.length; i++) ...[
-                _taskRow(_tasks[i]),
-                if (i != _tasks.length - 1)
-                  const Divider(height: 1, color: AppColors.cardBorder),
-              ],
-            ],
-          ),
+  Widget _taskList(BuildContext context, AppState state, List<DailyClassTask> tasks) => Container(
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: AppShadows.soft),
+    child: Column(children: [
+      for (var index = 0; index < tasks.length; index++) ...[
+        ListTile(
+          onTap: () async {
+            try {
+              await state.toggleTask(tasks[index], DateTime.now());
+            } catch (error) {
+              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update task: $error')));
+            }
+          },
+          leading: Checkbox(value: tasks[index].done, activeColor: AppColors.petInk, onChanged: (_) => state.toggleTask(tasks[index], DateTime.now())),
+          title: Text(tasks[index].label, style: TextStyle(decoration: tasks[index].done ? TextDecoration.lineThrough : null)),
+          subtitle: Text('${tasks[index].course.startTime} · ${tasks[index].course.courseName}', maxLines: 1, overflow: TextOverflow.ellipsis),
+          trailing: tasks[index].done ? const Icon(Icons.check_circle, color: AppColors.green) : Text('+${tasks[index].reward} 💎', style: const TextStyle(color: AppColors.gemInk, fontWeight: FontWeight.w700)),
         ),
+        if (index < tasks.length - 1) const Divider(height: 1, indent: 64),
       ],
-    );
-  }
-
-  Widget _taskRow(_Task task) {
-    return Padding(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () => setState(() => task.done = !task.done),
-            child: Container(
-              width: 22,
-              height: 22,
-              decoration: BoxDecoration(
-                color: task.done ? AppColors.petInk : AppColors.surface,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                    color: task.done ? AppColors.petInk : AppColors.fieldIcon),
-              ),
-              child: task.done
-                  ? const Icon(Icons.check, size: 16, color: AppColors.surface)
-                  : null,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Text(
-              task.label,
-              style: TextStyle(
-                fontSize: 16,
-                color: task.done ? AppColors.fieldIcon : AppColors.taskInk,
-                decoration:
-                    task.done ? TextDecoration.lineThrough : TextDecoration.none,
-              ),
-            ),
-          ),
-          _rewardPill(task),
-        ],
-      ),
-    );
-  }
-
-  Widget _rewardPill(_Task task) {
-    if (task.done) {
-      return Container(
-        padding: const EdgeInsets.all(6),
-        decoration: const BoxDecoration(
-            color: AppColors.cardBorder, shape: BoxShape.circle),
-        child: const Icon(Icons.check, size: 12, color: AppColors.fieldIcon),
-      );
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0x33FDCC00),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.diamond, size: 12, color: AppColors.blue),
-          const SizedBox(width: 4),
-          Text('+${task.reward}',
-              style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.48,
-                  color: AppColors.gemInk)),
-        ],
-      ),
-    );
-  }
+    ]),
+  );
 }

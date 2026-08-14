@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'data/app_config.dart';
 import 'data/app_state.dart';
 import 'data/mapbox_config.dart';
 import 'router/app_router.dart';
@@ -17,21 +19,46 @@ Future<void> main() async {
   // blank until a token is provided) — see README for setup.
   await dotenv.load(fileName: '.env', isOptional: true);
 
+  SupabaseClient? supabase;
+  if (AppConfig.hasSupabase) {
+    await Supabase.initialize(
+      url: AppConfig.supabaseUrl,
+      publishableKey: AppConfig.supabasePublishableKey,
+    );
+    supabase = Supabase.instance.client;
+  }
+
   // Hand the public token to the native Mapbox SDK.
   MapboxOptions.setAccessToken(mapboxPublicToken);
 
   SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark);
 
-  runApp(const NaviPetApp());
+  runApp(NaviPetApp(appState: AppState(supabase: supabase)));
 }
 
-class NaviPetApp extends StatelessWidget {
-  const NaviPetApp({super.key});
+class NaviPetApp extends StatefulWidget {
+  const NaviPetApp({super.key, required this.appState});
+
+  final AppState appState;
+
+  @override
+  State<NaviPetApp> createState() => _NaviPetAppState();
+}
+
+class _NaviPetAppState extends State<NaviPetApp> {
+  late final _router = createAppRouter(widget.appState);
+
+  @override
+  void dispose() {
+    _router.dispose();
+    widget.appState.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AppState(),
+    return ChangeNotifierProvider.value(
+      value: widget.appState,
       child: MaterialApp.router(
         title: 'NaviPet',
         debugShowCheckedModeBanner: false,
@@ -41,7 +68,7 @@ class NaviPetApp extends StatelessWidget {
           fontFamily: 'Plus Jakarta Sans',
           useMaterial3: true,
         ),
-        routerConfig: appRouter,
+        routerConfig: _router,
       ),
     );
   }

@@ -43,10 +43,7 @@ class SearchBarField extends StatelessWidget {
               ),
             ),
           ),
-          if (right != null) ...[
-            const SizedBox(width: AppSpacing.sm),
-            right!,
-          ],
+          if (right != null) ...[const SizedBox(width: AppSpacing.sm), right!],
         ],
       ),
     );

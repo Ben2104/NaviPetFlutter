@@ -1,186 +1,240 @@
-# NaviPet (Flutter)
+# NaviPet Flutter
 
-A Flutter port of the NaviPet campus-companion app, using the **native Mapbox
-Maps Flutter SDK** (`mapbox_maps_flutter`) instead of the WebView-based Mapbox GL
-JS map the original React Native app used.
+NaviPet is a campus companion for CSU Long Beach. The current functional slice
+includes:
 
-This is an incremental port. The current scope is the first flow only:
-
-> **Sign In → Map** — sign in (or continue as guest) and land on a native Mapbox
-> map centered on the CSU Long Beach campus, with a "You" marker, a floating
-> search bar, and a 2D/3D toggle.
-
-The remaining screens (Pet, Search, Store, Friends, Chat, Settings, Achievements,
-etc.) from the RN app are not ported yet.
-
----
+- Supabase email/password authentication, account creation, password reset,
+  anonymous guest sessions, persisted sessions, and profile data.
+- A native Mapbox map with live device location.
+- Mapbox destination autocomplete and walking directions.
+- A route line, destination marker, ETA/distance preview, maneuver guidance,
+  spoken instructions, arrival detection, and basic off-route recalculation.
+- Existing Pet, Checklist, Account, and prototype AR screens. The 3D/Multiset
+  integration is intentionally deferred and is not exposed from the map.
 
 ## Project structure
 
-```
+Detailed file ownership and collaboration guidance is available in
+[docs/PROJECT_MAP.md](docs/PROJECT_MAP.md).
+
+```text
+FRONTEND
+lib/screens/                       Complete Flutter screens
+lib/widgets/                       Reusable UI components
+lib/theme/                         Visual design tokens
+lib/router/                        App navigation and redirects
+assets/                            Images and fonts
+
+CLIENT SERVICES + SHARED MODELS
 lib/
-  main.dart                  App entry: loads .env, sets the Mapbox token, mounts providers + router
-  router/app_router.dart     go_router routes (/signin, /map) — analog of the RN RootNavigator
+  main.dart                         App initialization
   data/
-    app_state.dart           AppState (ChangeNotifier) — analog of the RN AppState context
-    mock_data.dart           UserAccount model + `users` fixture
-    mapbox_config.dart       Public token (from .env), style, CSULB coords + zoom
-  screens/
-    sign_in_screen.dart      Sign-in UI (ported from SignInScreen.tsx)
-    map_screen.dart          Native Mapbox map (ported from MapScreen.tsx + MapboxMap.tsx)
-  theme/app_theme.dart       Design tokens (colors/spacing/radius/shadows) from theme/index.ts
-  widgets/search_bar_field.dart  Pill search bar (ported from SearchBar.tsx)
-assets/mascot.png            App mascot shown on the sign-in screen
-.env.example                 Template for the public Mapbox token
+    app_config.dart                 Safe runtime configuration checks
+    app_state.dart                  Supabase auth, classes, and task state
+    course_class.dart               Class schedule and generated-task models
+    search_history_store.dart       On-device recent destination history
+    user_account.dart               Authenticated profile model
+    mapbox_config.dart              Mapbox token and campus defaults
+    mapbox_navigation_service.dart  Search Box + Directions API client
+    navigation_models.dart          Destination, route, and maneuver models
+
+BACKEND
+supabase/schema.sql                 Profiles, classes, completions, and RLS
+Supabase Auth                       Accounts, sessions, and password recovery
+
+PLATFORM + BUILD
+android/                            Android native and Gradle configuration
+ios/                                iOS native and Xcode configuration
+pubspec.yaml                        Dependencies, assets, and app version
+test/                               Automated tests
 ```
-
-State uses [`provider`](https://pub.dev/packages/provider), navigation uses
-[`go_router`](https://pub.dev/packages/go_router), and env loading uses
-[`flutter_dotenv`](https://pub.dev/packages/flutter_dotenv).
-
----
 
 ## Prerequisites
 
-| Tool | Notes |
-|---|---|
-| **Flutter SDK** (3.44+) | `brew install --cask flutter`, then `flutter doctor` |
-| **Xcode** (for iOS) | Install from the App Store; run `xcodebuild -runFirstLaunch` once |
-| **iOS Simulator** | Bundled with Xcode |
-| **Android Studio + SDK** (for Android) | Provides the emulator and the **cmdline-tools** component |
-| **A Mapbox account** | Free at <https://account.mapbox.com> — you'll create tokens below |
+- Flutter 3.44 or later
+- Android Studio and Android SDK 36 for Android development
+- Xcode and an iOS runtime for iOS development
+- A Mapbox account
+- A Supabase project
 
-Run `flutter doctor` and resolve anything it flags before continuing.
+Run `flutter doctor` and resolve its required items before continuing.
 
----
+## Environment configuration
 
-## Mapbox setup (read this carefully)
+Copy `.env.example` to `.env`. The `.env` file is git-ignored.
 
-The native Mapbox SDK uses **two different tokens**. Don't mix them up.
+```properties
+MAPBOX_PUBLIC_TOKEN=pk.your_public_token
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key
+```
 
-### 1. Public token (`pk.*`) — required on every platform
+Use only Supabase's publishable/anon client key. Never place a Supabase
+`service_role` or secret key in the app.
 
-Used at **runtime** to display the map.
+### Mapbox Android download token
 
-1. Go to <https://account.mapbox.com/access-tokens/> and copy your **default
-   public token** (starts with `pk.`).
-2. Copy the env template and paste your token in:
-   ```bash
-   cp .env.example .env
-   # then edit .env:
-   # MAPBOX_PUBLIC_TOKEN=pk.your_token_here
-   ```
-   `.env` is git-ignored. It's loaded in `lib/main.dart` and handed to the SDK via
-   `MapboxOptions.setAccessToken(...)`.
+Android builds also require a secret Mapbox token with `DOWNLOADS:READ`. Put it
+in your user-level Gradle file, not in this repository:
 
-> A working public token is already filled into `.env` on this machine, so the map
-> works out of the box locally. Anyone cloning the repo must create their own
-> `.env` from `.env.example`.
+```text
+C:\Users\YOUR_NAME\.gradle\gradle.properties
+```
 
-### 2. Secret download token (`sk.*`) — **Android only**
+```properties
+MAPBOX_DOWNLOADS_TOKEN=sk.your_download_token
+```
 
-Used at **build time** to download the Mapbox Android SDK from Mapbox's Maven
-repository. **iOS does not need this** — this project resolves the iOS SDK via
-Swift Package Manager, which uses the public packages.
+## Supabase setup
 
-1. At <https://account.mapbox.com/access-tokens/>, click **Create a token**.
-2. Give it a name, and under **Secret scopes** check **`DOWNLOADS:READ`**.
-3. Create it and copy the token (starts with `sk.`). **You only see it once.**
-4. Add it to your **global** Gradle properties so it stays out of the repo:
-   ```bash
-   mkdir -p ~/.gradle
-   echo 'MAPBOX_DOWNLOADS_TOKEN=sk.your_secret_token_here' >> ~/.gradle/gradle.properties
-   ```
-   The Maven repo in `android/build.gradle.kts` reads this property. Without it,
-   Android builds fail with a `401 Unauthorized` while resolving the Mapbox
-   dependency.
+1. Create a Supabase project.
+2. Open **SQL Editor**, paste [supabase/schema.sql](supabase/schema.sql), and run
+   it once. This creates the profile, class, and completion tables, the
+   new-user trigger, and Row Level Security policies. If you ran an older copy,
+   run the entire file again; it is safe to re-run and adds the new tables.
+3. In **Authentication > Providers**, keep Email enabled.
+4. Enable anonymous sign-ins if **Continue as Guest** should work.
+5. Decide whether new users must confirm their email. NaviPet handles both
+   configurations: with confirmation enabled it asks users to check their email;
+   without it they enter the app immediately.
+6. Copy the Project URL and publishable key from Supabase's **Connect** panel into
+   `.env`.
 
----
+Supabase Auth owns passwords and sessions. `profiles` stores app-facing account
+data, `classes` stores each user's schedule and locations, and
+`task_completions` stores daily progress. Owner-only policies protect each row.
 
-## Run on the iOS Simulator
+## Run on an Android phone
 
-```bash
-# 1. Open a simulator
-open -a Simulator
+1. Enable Developer options and USB debugging on the phone.
+2. Connect it with a data-capable USB cable and approve the debugging prompt.
+3. From the project root, run:
 
-# 2. Get dependencies
+```powershell
 flutter pub get
-
-# 3. Run (Flutter auto-selects the booted simulator)
+flutter devices
 flutter run
 ```
 
-If multiple devices are connected, list them and pick one:
+The first build can take several minutes. The app will request location access
+when the map opens; precise location is needed for route guidance and rerouting.
 
-```bash
-flutter devices
-flutter run -d <device-id>      # e.g. flutter run -d "iPhone 16 Pro"
+## Run on an iPhone
+
+iPhone builds require **macOS and Xcode**. They cannot be compiled or installed
+from Windows. Make sure `.env` contains the Mapbox and Supabase values described
+above. The secret `MAPBOX_DOWNLOADS_TOKEN` is only needed for Android; iOS uses
+the public Mapbox token from `.env`.
+
+Avoid building the project from an iCloud-synced Desktop or Documents folder.
+iCloud metadata can cause iOS code signing to fail. A path such as
+`~/Development/NaviPetFlutter` is safer.
+
+### iOS Simulator
+
+1. Install Xcode from the Mac App Store and finish its first-run setup:
+
+   ```bash
+   sudo xcodebuild -runFirstLaunch
+   ```
+
+2. Open a simulator and run the app from the project root:
+
+   ```bash
+   open -a Simulator
+   flutter pub get
+   flutter devices
+   flutter run
+   ```
+
+3. If Flutter lists multiple targets, select the simulator explicitly:
+
+   ```bash
+   flutter run -d "iPhone 16 Pro"
+   ```
+
+The first iOS build can take several minutes while Xcode resolves the native
+Mapbox packages. A simulator can test the UI, authentication, search, and route
+preview, but a physical iPhone is better for testing live GPS navigation.
+
+### Physical iPhone
+
+1. Connect the unlocked iPhone to the Mac with a data-capable cable.
+2. Tap **Trust** if the iPhone asks whether to trust the computer.
+3. On iOS 16 or later, enable **Settings > Privacy & Security > Developer Mode**
+   if prompted, then restart the iPhone.
+4. Open the iOS workspace:
+
+   ```bash
+   open ios/Runner.xcworkspace
+   ```
+
+5. In Xcode, select **Runner > Signing & Capabilities**:
+   - Choose your Apple development team.
+   - If Xcode reports that the bundle identifier is unavailable, replace it with
+     a unique value such as `com.yourname.navipet`.
+   - Let Xcode create or update the development signing certificate.
+6. Select the connected iPhone once in Xcode and allow any requested device
+   preparation to finish.
+7. Return to the terminal and run:
+
+   ```bash
+   flutter devices
+   flutter run -d <iphone-device-id>
+   ```
+
+8. Approve the location request when NaviPet opens. Select precise location so
+   route guidance and rerouting can use an accurate GPS position.
+
+A free Apple ID can be used for development testing, although its signing has
+more restrictions. App Store or TestFlight distribution requires membership in
+the Apple Developer Program.
+
+## Navigation behavior
+
+The app stays on Mapbox for this phase. It uses the native Maps Flutter SDK for
+rendering and location, the Search Box API for destinations, and the Directions
+API's walking profile for route geometry and maneuver instructions.
+
+This is a functional foreground walking-navigation experience. Before treating
+it as safety-critical or shipping it broadly, add integration/device tests for
+GPS loss, background execution, route deviations, network loss, accessibility,
+and battery use. Do not rely on it for emergency navigation.
+
+The three most recent selected destinations are kept only on the phone and can
+be cleared from Search. They are not uploaded to Supabase. Class locations are
+stored in Supabase so Search can adapt to a user's schedule across devices.
+
+## Verification
+
+```powershell
+flutter analyze
+flutter test
+flutter build apk --debug
 ```
 
-Notes:
-- iOS dependencies are managed by **Swift Package Manager** (there is no
-  `Podfile`). The first build fetches the Mapbox Swift packages from GitHub and
-  can take several minutes.
-- The iOS deployment target is set to **14.0** (Mapbox's minimum).
+The debug APK is written to:
 
-> ⚠️ **Do not build iOS from an iCloud-synced folder (Desktop/Documents).**
-> When "Desktop & Documents Folders" iCloud Drive sync is on, iCloud stamps a
-> `com.apple.FinderInfo` extended attribute on build directories. `codesign`
-> rejects this with *"resource fork, Finder information, or similar detritus not
-> allowed"*, and the iOS build fails at the "copy Flutter framework" step.
-> **Fix: keep/clone this project in a non-synced location** such as
-> `~/Development/NaviPetFlutter`. (Android is unaffected.) See troubleshooting
-> below.
-
----
-
-## Run on the Android Emulator
-
-```bash
-# 1. Make sure the secret download token is configured (see Mapbox setup §2)
-
-# 2. Launch an emulator (or start one from Android Studio > Device Manager)
-flutter emulators                       # list available AVDs
-flutter emulators --launch <avd-id>
-
-# 3. Run
-flutter pub get
-flutter run -d android
+```text
+build\app\outputs\flutter-apk\app-debug.apk
 ```
-
-The first Android build downloads the Mapbox Android SDK via Maven using your
-`MAPBOX_DOWNLOADS_TOKEN`.
-
----
-
-## Verify the build without a device
-
-```bash
-flutter analyze              # static analysis (like the RN `npm run typecheck`)
-flutter test                 # unit tests (AppState sign-in logic)
-flutter build ios --simulator --debug    # compile for iOS Simulator, no signing
-```
-
----
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| **Android build: `401 Unauthorized` / can't resolve `com.mapbox.*`** | Missing/invalid secret download token. Add `MAPBOX_DOWNLOADS_TOKEN=sk...` (scope `DOWNLOADS:READ`) to `~/.gradle/gradle.properties`. |
-| **Map is blank / grey** | Missing or invalid **public** token. Check `.env` has a valid `MAPBOX_PUBLIC_TOKEN=pk...`. |
-| **`flutter doctor`: "cmdline-tools component is missing"** | Open Android Studio → Settings → Languages & Frameworks → Android SDK → SDK Tools → check **Android SDK Command-line Tools**, then `flutter doctor --android-licenses`. |
-| **Gradle fails on Java version** | This machine has a very new JDK. Point Flutter at the JDK bundled with Android Studio: `flutter config --jdk-dir "/Applications/Android Studio.app/Contents/jbr/Contents/Home"`. |
-| **iOS build: "resource fork, Finder information, or similar detritus not allowed" / "Failed to copy Flutter framework"** | The project is in an **iCloud-synced** folder (Desktop/Documents). iCloud adds a `com.apple.FinderInfo` xattr that `codesign` rejects. Move/clone the project to a non-synced path (e.g. `~/Development/NaviPetFlutter`), then `flutter clean && flutter run`. |
-| **iOS SPM fetch is slow/stuck** | First run only; it clones Mapbox repos. Re-run `flutter run`; ensure you have network access to github.com. |
-| **No simulators listed** | `open -a Simulator`, or in Xcode → Settings → Platforms install an iOS runtime. |
+| Supabase setup notice on sign-in | Add `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` to `.env`, then fully restart the app. |
+| Guest sign-in fails | Enable anonymous sign-ins in Supabase Authentication settings. |
+| New account cannot sign in immediately | Check the inbox and confirm the account, or disable Confirm email in Supabase for development. |
+| Map is blank or destination search fails | Verify `MAPBOX_PUBLIC_TOKEN` is a valid `pk.*` token. |
+| Android Mapbox dependency returns 401 | Verify the global `MAPBOX_DOWNLOADS_TOKEN` starts with `sk.` and has `DOWNLOADS:READ`. |
+| Current location is unavailable | Enable precise location for NaviPet and turn on the phone's Location Services. |
+| Route is not found | Walking directions require a Mapbox-routable origin and destination; try a nearby street entrance. |
+| `cmdline-tools` is missing | Install Android SDK Command-line Tools in Android Studio, then run `flutter doctor --android-licenses`. |
+| No iPhones or simulators are listed | Open Xcode, install an iOS runtime in **Xcode > Settings > Platforms**, then run `open -a Simulator` and `flutter devices`. |
+| Xcode reports a signing error | Select a development team under **Runner > Signing & Capabilities** and use a unique bundle identifier. |
+| iOS reports resource-fork/Finder metadata errors | Move the repository out of an iCloud-synced Desktop or Documents folder, then run `flutter clean` and try again. |
 
----
-
-## Adding the next screens
-
-1. Port the RN screen into `lib/screens/<name>_screen.dart` using the tokens in
-   `lib/theme/app_theme.dart`.
-2. Add a route in `lib/router/app_router.dart`.
-3. Extend `lib/data/app_state.dart` / `lib/data/mock_data.dart` with any state and
-   fixtures that screen needs (the RN `data/mockData.ts` is the reference).
+The Kotlin Gradle Plugin warning currently emitted by Mapbox/Flutter TTS is a
+forward-compatibility warning from those plugins; the Android build succeeds on
+the pinned Flutter/Mapbox versions in this repository.
