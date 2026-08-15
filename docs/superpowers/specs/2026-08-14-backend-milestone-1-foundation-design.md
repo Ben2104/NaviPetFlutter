@@ -2,7 +2,7 @@
 
 Date: 2026-08-14
 
-Status: Conversation design approved; awaiting written-spec review
+Status: Approved
 
 ## Purpose
 
