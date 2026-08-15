@@ -55,6 +55,13 @@ The independently configured Node.js backend lives in [`backend/`](backend/).
 See [`backend/README.md`](backend/README.md) for server setup, environment
 boundaries, authentication, health endpoints, OpenAPI, and verification.
 
+### Test Swagger first
+
+The backend can run with non-secret local placeholders when you only need to
+inspect its API documentation. Follow the
+[Swagger-first backend setup](backend/README.md#test-swagger-first), then open
+<http://127.0.0.1:3000/docs/> while `npm run dev` is running.
+
 ## Prerequisites
 
 - Flutter 3.44 or later
