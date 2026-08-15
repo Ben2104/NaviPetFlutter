@@ -49,6 +49,12 @@ pubspec.yaml                        Dependencies, assets, and app version
 test/                               Automated tests
 ```
 
+## Fastify backend
+
+The independently configured Node.js backend lives in [`backend/`](backend/).
+See [`backend/README.md`](backend/README.md) for server setup, environment
+boundaries, authentication, health endpoints, OpenAPI, and verification.
+
 ## Prerequisites
 
 - Flutter 3.44 or later

@@ -47,3 +47,9 @@ app.*.map.json
 
 # Secrets — Mapbox public token and any other env values (keep out of VCS)
 .env
+
+# Local isolated development worktrees
+/.worktrees/
+/backend/node_modules/
+/backend/dist/
+/backend/coverage/
