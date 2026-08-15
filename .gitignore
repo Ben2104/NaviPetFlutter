@@ -50,3 +50,6 @@ app.*.map.json
 
 # Local isolated development worktrees
 /.worktrees/
+/backend/node_modules/
+/backend/dist/
+/backend/coverage/
