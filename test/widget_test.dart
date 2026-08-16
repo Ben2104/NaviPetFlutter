@@ -53,4 +53,26 @@ void main() {
       expect(route.durationLabel, '1 hr 5 min');
     });
   });
+
+  group('NavigationTripSummary labels', () {
+    test('formats elapsed time and walking steps', () {
+      const summary = NavigationTripSummary(
+        elapsed: Duration(minutes: 12, seconds: 8),
+        walkingSteps: 1342,
+      );
+
+      expect(summary.elapsedLabel, '12m 8s');
+      expect(summary.walkingSteps, 1342);
+      expect(summary.walkingStepsLabel, '1342');
+    });
+
+    test('reports unavailable steps when the device cannot count them', () {
+      const summary = NavigationTripSummary(
+        elapsed: Duration(seconds: 4),
+        walkingSteps: null,
+      );
+
+      expect(summary.walkingStepsLabel, 'Unavailable');
+    });
+  });
 }
