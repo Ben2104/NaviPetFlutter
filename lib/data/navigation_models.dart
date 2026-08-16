@@ -70,3 +70,25 @@ class NavigationRoute {
     return remainder == 0 ? '$hours hr' : '$hours hr $remainder min';
   }
 }
+
+class NavigationTripSummary {
+  const NavigationTripSummary({
+    required this.elapsed,
+    required this.walkingSteps,
+  });
+
+  final Duration elapsed;
+  final int? walkingSteps;
+
+  String get walkingStepsLabel => walkingSteps?.toString() ?? 'Unavailable';
+
+  String get elapsedLabel {
+    final totalSeconds = elapsed.inSeconds;
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    if (hours > 0) return '${hours}h ${minutes}m ${seconds}s';
+    if (minutes > 0) return '${minutes}m ${seconds}s';
+    return '${seconds}s';
+  }
+}

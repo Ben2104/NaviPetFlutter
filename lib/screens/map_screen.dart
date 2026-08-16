@@ -5,7 +5,10 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:go_router/go_router.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
+import 'package:pedometer/pedometer.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/app_state.dart';
 import '../data/mapbox_config.dart';
@@ -23,14 +26,21 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  static const _lastLatitudeKey = 'last_location_latitude';
+  static const _lastLongitudeKey = 'last_location_longitude';
+
   late final MapboxNavigationService _navigationService;
+  late final Future<void> _lastLocationReady;
   final FlutterTts _tts = FlutterTts();
+  final Completer<void> _initialLocationReady = Completer<void>();
 
   MapboxMap? _map;
   PolylineAnnotationManager? _routeManager;
   PointAnnotationManager? _destinationManager;
   StreamSubscription<geo.Position>? _positionSubscription;
+  StreamSubscription<StepCount>? _stepCountSubscription;
   geo.Position? _position;
+  NavigationCoordinate? _lastKnownCoordinate;
   NaviDestination? _destination;
   NavigationRoute? _route;
   int _stepIndex = 0;
@@ -38,6 +48,10 @@ class _MapScreenState extends State<MapScreen> {
   bool _navigating = false;
   String? _locationMessage;
   DateTime? _lastReroute;
+  DateTime? _tripStartedAt;
+  int? _latestStepCount;
+  int? _tripStepBaseline;
+  bool _arrivalInProgress = false;
 
   @override
   void initState() {
@@ -45,6 +59,7 @@ class _MapScreenState extends State<MapScreen> {
     _navigationService = MapboxNavigationService(
       accessToken: mapboxPublicToken,
     );
+    _lastLocationReady = _loadLastKnownLocation();
     _tts
       ..setLanguage('en-US')
       ..setSpeechRate(0.48);
@@ -53,6 +68,7 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void dispose() {
     _positionSubscription?.cancel();
+    _stepCountSubscription?.cancel();
     _tts.stop();
     _navigationService.dispose();
     super.dispose();
@@ -64,7 +80,40 @@ class _MapScreenState extends State<MapScreen> {
         .createPolylineAnnotationManager();
     _destinationManager = await mapboxMap.annotations
         .createPointAnnotationManager();
-    await _initializeLocation();
+    await _lastLocationReady;
+    await _centerOnBestKnownLocation();
+    try {
+      await _initializeLocation();
+    } finally {
+      if (!_initialLocationReady.isCompleted) {
+        _initialLocationReady.complete();
+      }
+    }
+  }
+
+  Future<void> _loadLastKnownLocation() async {
+    final preferences = await SharedPreferences.getInstance();
+    final latitude = preferences.getDouble(_lastLatitudeKey);
+    final longitude = preferences.getDouble(_lastLongitudeKey);
+    if (latitude == null || longitude == null) return;
+    _lastKnownCoordinate = NavigationCoordinate(
+      latitude: latitude,
+      longitude: longitude,
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _rememberPosition(geo.Position position) async {
+    final coordinate = NavigationCoordinate(
+      latitude: position.latitude,
+      longitude: position.longitude,
+    );
+    _lastKnownCoordinate = coordinate;
+    final preferences = await SharedPreferences.getInstance();
+    await Future.wait([
+      preferences.setDouble(_lastLatitudeKey, coordinate.latitude),
+      preferences.setDouble(_lastLongitudeKey, coordinate.longitude),
+    ]);
   }
 
   Future<void> _initializeLocation() async {
@@ -80,12 +129,14 @@ class _MapScreenState extends State<MapScreen> {
               ? 'Location is disabled for NaviPet. Enable it in Settings.'
               : 'Location permission is required for navigation.';
         });
+        await _centerOnBestKnownLocation();
       }
       return;
     }
     if (!await geo.Geolocator.isLocationServiceEnabled()) {
       if (mounted) {
         setState(() => _locationMessage = 'Turn on Location Services.');
+        await _centerOnBestKnownLocation();
       }
       return;
     }
@@ -109,6 +160,7 @@ class _MapScreenState extends State<MapScreen> {
       _position = await geo.Geolocator.getCurrentPosition(
         locationSettings: settings,
       );
+      await _rememberPosition(_position!);
       if (mounted) {
         setState(() => _locationMessage = null);
         await _centerOnUser();
@@ -123,8 +175,9 @@ class _MapScreenState extends State<MapScreen> {
         geo.Geolocator.getPositionStream(locationSettings: settings).listen(
           (position) {
             _position = position;
+            unawaited(_rememberPosition(position));
             if (mounted) setState(() => _locationMessage = null);
-            if (_navigating) _handleNavigationUpdate(position);
+            if (_navigating) unawaited(_handleNavigationUpdate(position));
           },
           onError: (Object error) {
             if (mounted) setState(() => _locationMessage = error.toString());
@@ -139,12 +192,6 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _previewRoute(NaviDestination destination) async {
-    final origin = _position == null
-        ? const NavigationCoordinate(latitude: csulbLat, longitude: csulbLng)
-        : NavigationCoordinate(
-            latitude: _position!.latitude,
-            longitude: _position!.longitude,
-          );
     setState(() {
       _destination = destination;
       _loadingRoute = true;
@@ -152,6 +199,28 @@ class _MapScreenState extends State<MapScreen> {
       _route = null;
       _stepIndex = 0;
     });
+
+    // Search can return before the map's initial GPS lookup has completed.
+    // Give that lookup a short chance to finish so the first route request
+    // starts from the user's position instead of the campus fallback. Location
+    // errors and slow fixes still fall back without blocking navigation.
+    try {
+      await _initialLocationReady.future.timeout(const Duration(seconds: 8));
+    } on TimeoutException {
+      // Continue with the last known or default coordinate below.
+    }
+    if (!mounted) return;
+
+    final origin = _position == null
+        ? (_lastKnownCoordinate ??
+              const NavigationCoordinate(
+                latitude: csulbLat,
+                longitude: csulbLng,
+              ))
+        : NavigationCoordinate(
+            latitude: _position!.latitude,
+            longitude: _position!.longitude,
+          );
 
     try {
       final route = await _navigationService.getRoute(
@@ -237,7 +306,10 @@ class _MapScreenState extends State<MapScreen> {
     setState(() {
       _navigating = true;
       _stepIndex = 0;
+      _tripStartedAt = DateTime.now();
+      _tripStepBaseline = _latestStepCount;
     });
+    await _startStepTracking();
     await _speak(route.steps.first.instruction);
     await _centerOnUser(following: true);
   }
@@ -245,7 +317,12 @@ class _MapScreenState extends State<MapScreen> {
   Future<void> _handleNavigationUpdate(geo.Position position) async {
     final route = _route;
     final destination = _destination;
-    if (!_navigating || route == null || destination == null) return;
+    if (!_navigating ||
+        _arrivalInProgress ||
+        route == null ||
+        destination == null) {
+      return;
+    }
 
     if (_stepIndex < route.steps.length) {
       final step = route.steps[_stepIndex];
@@ -268,9 +345,7 @@ class _MapScreenState extends State<MapScreen> {
       destination.coordinate.longitude,
     );
     if (arrivalDistance < 15) {
-      setState(() => _navigating = false);
-      await _speak('You have arrived at ${destination.name}.');
-      if (mounted) _showMessage('You have arrived at ${destination.name}.');
+      await _completeArrival(destination);
       return;
     }
 
@@ -342,15 +417,126 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  Future<void> _centerOnBestKnownLocation() async {
+    final map = _map;
+    final coordinate = _position == null
+        ? _lastKnownCoordinate
+        : NavigationCoordinate(
+            latitude: _position!.latitude,
+            longitude: _position!.longitude,
+          );
+    if (map == null || coordinate == null) return;
+    await map.easeTo(
+      CameraOptions(
+        center: Point(
+          coordinates: Position(coordinate.longitude, coordinate.latitude),
+        ),
+        zoom: 16,
+      ),
+      MapAnimationOptions(duration: 500),
+    );
+  }
+
+  Future<void> _startStepTracking() async {
+    if (Theme.of(context).platform == TargetPlatform.android) {
+      final status = await Permission.activityRecognition.request();
+      if (!status.isGranted) return;
+    }
+    await _stepCountSubscription?.cancel();
+    _stepCountSubscription = Pedometer.stepCountStream.listen(
+      (event) {
+        _latestStepCount = event.steps;
+        _tripStepBaseline ??= event.steps;
+      },
+      onError: (_) {
+        _latestStepCount = null;
+        _tripStepBaseline = null;
+      },
+    );
+  }
+
+  Future<void> _completeArrival(NaviDestination destination) async {
+    _arrivalInProgress = true;
+    final startedAt = _tripStartedAt;
+    final baseline = _tripStepBaseline;
+    final currentSteps = _latestStepCount;
+    final countedSteps = baseline == null || currentSteps == null
+        ? null
+        : (currentSteps - baseline).clamp(0, 1 << 31).toInt();
+    final summary = NavigationTripSummary(
+      elapsed: startedAt == null
+          ? Duration.zero
+          : DateTime.now().difference(startedAt),
+      walkingSteps: countedSteps,
+    );
+
+    await _removeRoute();
+    await _stepCountSubscription?.cancel();
+    _stepCountSubscription = null;
+    await _speak('You have arrived at ${destination.name}.');
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(
+          Icons.check_circle,
+          color: AppColors.green,
+          size: 56,
+        ),
+        title: const Text('You have arrived!'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              destination.name,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 20),
+            _summaryRow(Icons.timer_outlined, 'Travel time', summary.elapsedLabel),
+            const SizedBox(height: 12),
+            _summaryRow(
+              Icons.directions_walk,
+              'Walking steps',
+              summary.walkingStepsLabel,
+            ),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+    _arrivalInProgress = false;
+  }
+
+  Widget _summaryRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, color: AppColors.navy),
+        const SizedBox(width: 10),
+        Expanded(child: Text(label)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+      ],
+    );
+  }
+
   Future<void> _stopNavigation() async {
-    await _tts.stop();
-    if (mounted) setState(() => _navigating = false);
-    final route = _route;
-    if (route != null) await _fitRoute(route);
+    await _clearRoute();
   }
 
   Future<void> _clearRoute() async {
     await _tts.stop();
+    await _stepCountSubscription?.cancel();
+    _stepCountSubscription = null;
+    await _removeRoute();
+  }
+
+  Future<void> _removeRoute() async {
     await _routeManager?.deleteAll();
     await _destinationManager?.deleteAll();
     if (mounted) {
@@ -359,6 +545,8 @@ class _MapScreenState extends State<MapScreen> {
         _route = null;
         _navigating = false;
         _stepIndex = 0;
+        _tripStartedAt = null;
+        _tripStepBaseline = null;
       });
     }
   }
@@ -379,6 +567,9 @@ class _MapScreenState extends State<MapScreen> {
     final activeUser = context.watch<AppState>().activeUser;
     final padding = MediaQuery.paddingOf(context);
 
+    final initialCoordinate = _lastKnownCoordinate ??
+        const NavigationCoordinate(latitude: csulbLat, longitude: csulbLng);
+
     return Scaffold(
       backgroundColor: AppColors.map,
       bottomNavigationBar: _navigating
@@ -390,7 +581,12 @@ class _MapScreenState extends State<MapScreen> {
             key: const ValueKey('navipet-map'),
             styleUri: mapboxStyle,
             viewport: CameraViewportState(
-              center: Point(coordinates: Position(csulbLng, csulbLat)),
+              center: Point(
+                coordinates: Position(
+                  initialCoordinate.longitude,
+                  initialCoordinate.latitude,
+                ),
+              ),
               zoom: csulbZoom,
             ),
             onMapCreated: _onMapCreated,
@@ -428,7 +624,7 @@ class _MapScreenState extends State<MapScreen> {
               heroTag: 'recenter',
               backgroundColor: Colors.white,
               foregroundColor: AppColors.navy,
-              onPressed: _centerOnUser,
+              onPressed: _centerOnBestKnownLocation,
               child: const Icon(Icons.my_location),
             ),
           ),
