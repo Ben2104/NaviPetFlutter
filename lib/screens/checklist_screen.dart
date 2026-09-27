@@ -94,6 +94,33 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
             ),
             const SizedBox(height: 24),
             _sectionTitle(
+              'Class achievements',
+              '${state.classes.length} classes',
+            ),
+            const SizedBox(height: 12),
+            if (state.classesBusy && state.classes.isEmpty)
+              const Center(child: CircularProgressIndicator())
+            else if (state.classes.isEmpty)
+              _emptyClasses(context)
+            else
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: .9,
+                ),
+                itemCount: state.classes.length,
+                itemBuilder: (_, index) => _achievementCard(
+                  context,
+                  state.classes[index],
+                  state.completionCountFor(state.classes[index].id),
+                ),
+              ),
+            const SizedBox(height: 28),
+            _sectionTitle(
               'Daily tasks',
               '${tasks.where((task) => task.done).length}/${tasks.length} done',
             ),
