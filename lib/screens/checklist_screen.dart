@@ -136,7 +136,11 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
             children: [
               const Text(
                 'Schedule',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.petInk),
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.petInk,
+                ),
               ),
               const SizedBox(height: 10),
               SizedBox(
@@ -152,8 +156,20 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                           onTap: () => setState(() => _selectedDate = date),
                           child: Column(
                             children: [
-                              Text(dayNames[index], style: const TextStyle(fontSize: 11, color: AppColors.muted)),
-                              Text('${date.month}/${date.day}', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.petInk)),
+                              Text(
+                                dayNames[index],
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.muted,
+                                ),
+                              ),
+                              Text(
+                                '${date.month}/${date.day}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.petInk,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -177,10 +193,17 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                               width: timeWidth,
                               child: Text(
                                 _hourLabel(startHour + row),
-                                style: const TextStyle(fontSize: 10, color: AppColors.muted),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: AppColors.muted,
+                                ),
                               ),
                             ),
-                            Container(width: dayWidth * 7, height: 1, color: AppColors.cardBorder),
+                            Container(
+                              width: dayWidth * 7,
+                              height: 1,
+                              color: AppColors.cardBorder,
+                            ),
                           ],
                         ),
                       ),
@@ -194,14 +217,24 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                     for (final course in classes)
                       for (final weekday in course.weekdays)
                         if (weekday >= 1 && weekday <= 7)
-                          _classBlock(course, weekday - 1, dayWidth, timeWidth, rowHeight, startHour),
+                          _classBlock(
+                            course,
+                            weekday - 1,
+                            dayWidth,
+                            timeWidth,
+                            rowHeight,
+                            startHour,
+                          ),
                   ],
                 ),
               ),
               if (classes.isEmpty)
                 const Padding(
                   padding: EdgeInsets.only(top: 12),
-                  child: Text('Add a class to populate your schedule.', style: TextStyle(color: AppColors.muted)),
+                  child: Text(
+                    'Add a class to populate your schedule.',
+                    style: TextStyle(color: AppColors.muted),
+                  ),
                 ),
             ],
           ),
@@ -216,13 +249,23 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
     return '$display:00 $suffix';
   }
 
-  Widget _classBlock(CourseClass course, int day, double dayWidth, double timeWidth, double rowHeight, int startHour) {
+  Widget _classBlock(
+    CourseClass course,
+    int day,
+    double dayWidth,
+    double timeWidth,
+    double rowHeight,
+    int startHour,
+  ) {
     final start = _minutes(course.startTime);
     final end = _minutes(course.endTime);
     final top = ((start - startHour * 60) / 60 * rowHeight)
         .clamp(0.0, 740.0)
         .toDouble();
-    final height = (((end - start) / 60 * rowHeight).clamp(42.0, 740.0)).toDouble();
+    final height = (((end - start) / 60 * rowHeight).clamp(
+      42.0,
+      740.0,
+    )).toDouble();
     return Positioned(
       left: timeWidth + day * dayWidth + 4,
       top: top,
@@ -233,7 +276,9 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         child: Container(
           padding: const EdgeInsets.all(5),
           decoration: BoxDecoration(
-            color: course.isOnline ? const Color(0xFFD9E8F7) : const Color(0xFFC5DDA2),
+            color: course.isOnline
+                ? const Color(0xFFD9E8F7)
+                : const Color(0xFFC5DDA2),
             borderRadius: BorderRadius.circular(4),
             border: Border.all(color: AppColors.petInk.withValues(alpha: .18)),
           ),
@@ -241,7 +286,12 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
             '${course.courseCode}\n${course.courseName}\n${course.startTime}-${course.endTime}\n${course.locationLabel}',
             maxLines: 8,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 10, height: 1.15, color: AppColors.petInk, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              fontSize: 10,
+              height: 1.15,
+              color: AppColors.petInk,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),
@@ -250,7 +300,8 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
 
   int _minutes(String value) {
     final parts = value.split(':');
-    return (int.tryParse(parts.first) ?? 8) * 60 + (int.tryParse(parts.elementAt(1)) ?? 0);
+    return (int.tryParse(parts.first) ?? 8) * 60 +
+        (int.tryParse(parts.elementAt(1)) ?? 0);
   }
 
   Widget _intro(BuildContext context) => Container(
@@ -451,10 +502,10 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                     overflow: TextOverflow.ellipsis,
                   )
                 : Text(
-              '${tasks[index].course.startTime} · ${tasks[index].course.courseName}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+                    '${tasks[index].course.startTime} · ${tasks[index].course.courseName}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
             trailing: tasks[index].done
                 ? const Icon(Icons.check_circle, color: AppColors.green)
                 : tasks[index].kind == 'attend_online'

@@ -298,7 +298,10 @@ class _SearchOverlayState extends State<SearchOverlay> {
             padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text('No recent searches yet.', style: TextStyle(color: AppColors.muted)),
+              child: Text(
+                'No recent searches yet.',
+                style: TextStyle(color: AppColors.muted),
+              ),
             ),
           )
         else

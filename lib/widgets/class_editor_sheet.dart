@@ -312,7 +312,10 @@ class _ClassEditorSheetState extends State<ClassEditorSheet> {
         title: const Text('Delete class?'),
         content: Text('Remove ${course.courseCode} from your schedule?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
             onPressed: () => Navigator.pop(context, true),

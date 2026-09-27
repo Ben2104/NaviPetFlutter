@@ -68,7 +68,6 @@ class NaviBottomNav extends StatelessWidget {
               ],
             ),
           ),
-
         ],
       ),
     );

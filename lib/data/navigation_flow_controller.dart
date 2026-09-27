@@ -320,8 +320,7 @@ class NavigationFlowController extends ChangeNotifier {
         ),
         stillCurrent: () {
           final state = _state;
-          return state is FlowPlacePreview &&
-              state.place.id == resolved.id;
+          return state is FlowPlacePreview && state.place.id == resolved.id;
         },
       );
     }
@@ -628,7 +627,8 @@ class NavigationFlowController extends ChangeNotifier {
             stillCurrent: () {
               final state = _state;
               return state is FlowPlacePreview &&
-                  state.place.id == (place?.id ?? destination.id ?? destination.name);
+                  state.place.id ==
+                      (place?.id ?? destination.id ?? destination.name);
             },
           ),
         );
