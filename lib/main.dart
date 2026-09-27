@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -15,6 +17,7 @@ import 'data/location_service.dart';
 import 'data/mapbox_config.dart';
 import 'data/mapbox_navigation_service.dart';
 import 'data/navigation_flow_controller.dart';
+import 'data/profile_gateway.dart';
 import 'data/recent_searches_gateway.dart';
 import 'data/registration_gateway.dart';
 import 'data/route_repository.dart';
@@ -55,6 +58,12 @@ Future<void> main() async {
   final authTokenProvider = supabase == null
       ? null
       : SupabaseAuthTokenProvider(supabase.auth);
+  final profileGateway = AppConfig.hasBackend && authTokenProvider != null
+      ? HttpProfileGateway(
+          baseUrl: AppConfig.backendBaseUrl,
+          auth: authTokenProvider,
+        )
+      : null;
 
   runApp(
     NaviPetApp(
@@ -62,6 +71,7 @@ Future<void> main() async {
         supabase: supabase,
         registrationGateway: registrationGateway,
         classesGateway: classesGateway,
+        profileGateway: profileGateway,
       ),
       authTokenProvider: authTokenProvider,
     ),
@@ -81,7 +91,11 @@ class NaviPetApp extends StatefulWidget {
   State<NaviPetApp> createState() => _NaviPetAppState();
 }
 
-class _NaviPetAppState extends State<NaviPetApp> {
+class _NaviPetAppState extends State<NaviPetApp> with WidgetsBindingObserver {
+  /// Signed avatar URLs last about an hour; a resume after a long background
+  /// stint reloads the URL before the old one expires on screen.
+  static const _avatarUrlMaxAge = Duration(minutes: 10);
+
   late final _router = createAppRouter(widget.appState);
   late final NavigationFlowController _flow = _buildFlow();
 
@@ -98,6 +112,14 @@ class _NaviPetAppState extends State<NaviPetApp> {
     super.initState();
     _flowIdentity = widget.appState.activeUser?.id;
     widget.appState.addListener(_onAppStateChanged);
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(widget.appState.refreshProfile(maxAge: _avatarUrlMaxAge));
+    }
   }
 
   void _onAppStateChanged() {
@@ -140,6 +162,7 @@ class _NaviPetAppState extends State<NaviPetApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.appState.removeListener(_onAppStateChanged);
     _router.dispose();
     widget.appState.dispose();
