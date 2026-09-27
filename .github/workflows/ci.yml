@@ -56,11 +56,10 @@ jobs:
       - name: Test
         run: flutter test
 
-  # Starts only after analyze-and-test succeeds, so a broken PR fails fast and
-  # never spends runner time on the slower APK build.
+  # Runs in parallel with analyze-and-test so Android build breakage surfaces
+  # in the same run as Dart failures instead of after they are fixed.
   android-debug-build:
     name: android-debug-build
-    needs: analyze-and-test
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
