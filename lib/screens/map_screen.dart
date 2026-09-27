@@ -16,6 +16,7 @@ import '../data/navigation_models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/place_preview_sheet.dart';
+import '../widgets/profile_avatar.dart';
 import '../widgets/route_preview_sheet.dart';
 import '../widgets/search_bar_field.dart';
 import '../widgets/search_overlay.dart';
@@ -377,7 +378,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   Widget _searchBar(BuildContext context, EdgeInsets padding) {
-    final activeUser = context.watch<AppState>().activeUser;
+    final appState = context.watch<AppState>();
+    final activeUser = appState.activeUser;
     return Positioned(
       top: padding.top + AppSpacing.sm,
       left: AppSpacing.lg,
@@ -395,9 +397,17 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               width: 48,
               height: 48,
               child: Center(
-                child: _avatar(
-                  activeUser?.name ?? '?',
-                  activeUser?.avatarColor ?? AppColors.amber,
+                child: ProfileAvatar(
+                  name: activeUser?.name ?? '?',
+                  color: activeUser?.avatarColor ?? AppColors.amber,
+                  imageUrl: activeUser?.avatarUrl,
+                  size: 30,
+                  initialStyle: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                  onImageError: appState.reportAvatarLoadFailed,
                 ),
               ),
             ),
@@ -698,23 +708,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _avatar(String name, Color color) {
-    return Container(
-      width: 30,
-      height: 30,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      child: Text(
-        name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?',
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w900,
         ),
       ),
     );
