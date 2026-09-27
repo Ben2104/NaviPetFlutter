@@ -130,8 +130,13 @@ void main() {
       ],
     );
     final block = find.byKey(const ValueKey('class-1-3'));
+    // The code breaks at its space, never mid-word.
     expect(
-      find.descendant(of: block, matching: find.textContaining('CECS 1')),
+      find.descendant(of: block, matching: find.text('CECS')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: block, matching: find.text('1')),
       findsOneWidget,
     );
     expect(
@@ -204,5 +209,21 @@ void main() {
     expect(first.top, lessThan(second.top));
     expect(find.text('9:00–9:50 AM'), findsOneWidget);
     expect(find.text('No classes'), findsNWidgets(6));
+  });
+
+  testWidgets('agenda starts today and runs a week ahead', (tester) async {
+    await _pump(
+      tester,
+      view: CalendarView.agenda,
+      now: DateTime(2026, 9, 26), // a Saturday
+      classes: [
+        _course('1', '09:00', '09:50', [1]),
+      ],
+    );
+    final today = tester.getRect(find.text('Today · Sat, Sep 26'));
+    final monday = tester.getRect(find.text('Mon, Sep 28'));
+    expect(today.top, lessThan(monday.top));
+    expect(find.text('Fri, Oct 2'), findsOneWidget);
+    expect(find.text('Mon, Sep 21'), findsNothing);
   });
 }

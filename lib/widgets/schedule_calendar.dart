@@ -8,8 +8,8 @@ import '../theme/app_theme.dart';
 /// How [ScheduleCalendar] lays out the current week.
 enum CalendarView { week, day, agenda }
 
-/// The user's classes for the current week (Mon–Sun) as a time grid of the
-/// whole week, a time grid of the selected day, or an agenda list.
+/// The user's weekly classes as a time grid of the current week (Mon–Sun), a
+/// time grid of the selected day, or an agenda of the next seven days.
 ///
 /// The grid fits all seven days to the available width, grows its hours to
 /// fit the earliest and latest class, and scrolls itself to the current time.
@@ -164,7 +164,10 @@ class _ScheduleCalendarState extends State<ScheduleCalendar> {
         boxShadow: AppShadows.soft,
       ),
       child: widget.view == CalendarView.agenda
-          ? _agenda(days, now)
+          ? _agenda([
+              for (var index = 0; index < 7; index++)
+                DateTime(now.year, now.month, now.day + index),
+            ], now)
           : LayoutBuilder(
               builder: (context, constraints) {
                 final dayWidth = (constraints.maxWidth - _timeWidth) / 7;
@@ -426,11 +429,13 @@ class _ScheduleCalendarState extends State<ScheduleCalendar> {
                 border: Border(left: BorderSide(color: accent, width: 3)),
               ),
               padding: const EdgeInsets.fromLTRB(5, 4, 4, 4),
-              child: Text.rich(
-                compact ? _compactLabel(course) : _fullLabel(course),
-                maxLines: compact ? 3 : 4,
-                overflow: TextOverflow.ellipsis,
-              ),
+              child: compact
+                  ? _compactLabel(course)
+                  : Text.rich(
+                      _fullLabel(course),
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                    ),
             ),
           ),
         ),
@@ -446,20 +451,64 @@ class _ScheduleCalendarState extends State<ScheduleCalendar> {
     ),
   );
 
-  TextSpan _compactLabel(CourseClass course) => TextSpan(
-    style: const TextStyle(color: AppColors.petInk, height: 1.2),
-    children: [
-      TextSpan(
-        text: '${course.courseCode}\n',
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+  /// Course code split at its space (`CECS` / `491A`) and the start time,
+  /// each line shrunk to fit so a narrow week column never breaks a word.
+  /// Clipped rather than overflowing when the class is short.
+  Widget _compactLabel(CourseClass course) {
+    final parts = course.courseCode.trim().split(RegExp(r'\s+'));
+    final lines = parts.length > 1
+        ? [parts.first, parts.skip(1).join(' ')]
+        : [course.courseCode];
+    Widget fit(Widget child) => FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: child,
+    );
+    const code = TextStyle(
+      fontSize: 11,
+      height: 1.15,
+      fontWeight: FontWeight.w800,
+      color: AppColors.petInk,
+    );
+    return ClipRect(
+      child: OverflowBox(
+        alignment: Alignment.topLeft,
+        maxHeight: double.infinity,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final line in lines) fit(Text(line, style: code)),
+            fit(
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (course.isOnline)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 2),
+                      child: Icon(
+                        Icons.videocam_outlined,
+                        size: 12,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                  Text(
+                    formatClockTime(course.startTime, period: false),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      height: 1.2,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.petInk,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
-      if (course.isOnline) _onlineIcon(12),
-      TextSpan(
-        text: formatClockTime(course.startTime, period: false),
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-      ),
-    ],
-  );
+    );
+  }
 
   TextSpan _fullLabel(CourseClass course) => TextSpan(
     style: const TextStyle(color: AppColors.petInk, height: 1.25),
