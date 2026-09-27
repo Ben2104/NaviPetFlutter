@@ -636,14 +636,23 @@ class NavigationFlowController extends ChangeNotifier {
         // Identical to the user tapping the steps sheet's close affordance
         // — one behaviour per transition, not a second copy of it.
         hideSteps();
-      case FlowActiveNavigation():
-        // Identical to the user tapping "end navigation". Firing without
-        // awaiting is only safe because endRoute() has no `await` before
-        // its `_set` call, so the state update still lands this turn. If
-        // endRoute() ever gains an await before that `_set`, back() would
-        // silently stop updating state synchronously and no test here
-        // would catch it.
-        unawaited(endRoute());
+      case FlowActiveNavigation(
+        :final destination,
+        :final origin,
+        :final plan,
+        :final place,
+      ):
+        // Back (and the "Overview" button) leaves guidance but keeps the
+        // route. Only an explicit, confirmed endRoute() discards it.
+        _generation++;
+        _set(
+          FlowRoutePreview(
+            destination: destination,
+            origin: origin,
+            plan: plan,
+            place: place,
+          ),
+        );
       case FlowIndoorHandoff():
         _generation++;
         _set(const FlowIdle());

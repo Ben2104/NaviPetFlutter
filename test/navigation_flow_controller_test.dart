@@ -198,9 +198,20 @@ void main() {
 
     await controller.startRoute();
     expect(controller.state, isA<FlowActiveNavigation>());
+  });
+
+  test('ending the route returns to an idle, cleared map', () async {
+    final map = harness.RecordingMap();
+    final controller = harness.build(map: map)..openSearch();
+    await controller.selectPlace(harness.horn);
+    await controller.requestDirections();
+    await controller.calculateRoute();
+    await controller.startRoute();
 
     await controller.endRoute();
-    expect(controller.state, isA<FlowRoutePreview>());
+
+    expect(controller.state, isA<FlowIdle>());
+    expect(map.calls.last, 'clear');
   });
 
   test('guidance is refused for a manually chosen origin', () async {
@@ -390,7 +401,7 @@ void main() {
     expect((controller.state as FlowRoutePreview).plan, plan);
   });
 
-  test('back from active navigation behaves like ending the route', () async {
+  test('back from active navigation returns to the route overview', () async {
     final controller = harness.build()..openSearch();
     await controller.selectPlace(harness.horn);
     await controller.requestDirections();
