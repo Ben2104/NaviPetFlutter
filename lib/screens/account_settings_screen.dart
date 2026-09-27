@@ -9,6 +9,7 @@ import '../data/avatar_draft_controller.dart';
 import '../data/profile_gateway.dart';
 import '../theme/app_theme.dart';
 import '../widgets/profile_avatar.dart';
+import 'avatar_crop_screen.dart';
 
 const _navy = Color(0xFF001A3D);
 const _page = Color(0xFFFAFAFA);
@@ -30,14 +31,7 @@ class AccountSettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 32, 20, 48),
         children: [
-          Center(
-            child: _Avatar(
-              name: name,
-              color: user?.avatarColor,
-              imageUrl: user?.avatarUrl,
-              onImageError: appState.reportAvatarLoadFailed,
-            ),
-          ),
+          Center(child: _AccountAvatar(name: name)),
           const SizedBox(height: 18),
           Text(
             name,
@@ -203,26 +197,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  static Future<XFile?> _pickFromLibrary() => ImagePicker().pickImage(
-    source: ImageSource.gallery,
-    imageQuality: 85,
-    maxWidth: 1024,
-  );
-
   Future<void> _pickAvatar() async {
     final avatar = _avatar;
     if (avatar == null || _saving) return;
-    final XFile? file;
-    try {
-      file = await (widget.pickImage ?? _pickFromLibrary)();
-    } on PlatformException {
-      if (mounted) _prototypeNotice(context, 'Could not open your photos.');
-      return;
-    }
-    if (file == null || !mounted) return;
-    final bytes = await file.readAsBytes();
-    if (!mounted) return;
-    final error = await avatar.upload(bytes, file.name);
+    final bytes = await pickAndCropAvatar(context, pickImage: widget.pickImage);
+    if (bytes == null || !mounted) return;
+    final error = await avatar.upload(bytes, 'avatar.png');
     if (error != null && mounted) _prototypeNotice(context, error);
   }
 
@@ -306,39 +286,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         children: [
           const SizedBox(height: 4),
           Center(
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                _Avatar(
-                  name: _name.text,
-                  color: AppColors.blue,
-                  radius: 48,
-                  imageUrl: previewUrl ?? appState.activeUser?.avatarUrl,
-                  // A failed preview is not the saved avatar; refetching the
-                  // profile would not help it.
-                  onImageError: previewUrl == null
-                      ? appState.reportAvatarLoadFailed
-                      : null,
-                ),
-                if (uploading)
-                  const Positioned.fill(
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                if (avatar != null)
-                  Positioned(
-                    right: -4,
-                    bottom: -4,
-                    child: IconButton.filled(
-                      tooltip: 'Change profile photo',
-                      onPressed: _saving ? null : _pickAvatar,
-                      style: IconButton.styleFrom(
-                        backgroundColor: _navy,
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: const Icon(Icons.photo_camera_outlined, size: 20),
-                    ),
-                  ),
-              ],
+            child: _EditableAvatar(
+              editable: avatar != null,
+              busy: uploading,
+              onEdit: _saving ? null : _pickAvatar,
+              avatar: _Avatar(
+                name: _name.text,
+                color: AppColors.blue,
+                radius: 48,
+                imageUrl: previewUrl ?? appState.activeUser?.avatarUrl,
+                // A failed preview is not the saved avatar; refetching the
+                // profile would not help it.
+                onImageError: previewUrl == null
+                    ? appState.reportAvatarLoadFailed
+                    : null,
+              ),
             ),
           ),
           const SizedBox(height: 24),
@@ -851,6 +813,128 @@ class _Avatar extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// An avatar with a progress overlay and, when [editable], a pencil badge.
+class _EditableAvatar extends StatelessWidget {
+  const _EditableAvatar({
+    required this.avatar,
+    required this.editable,
+    this.busy = false,
+    this.onEdit,
+  });
+  final Widget avatar;
+  final bool editable;
+  final bool busy;
+
+  /// Null disables the badge (e.g. while saving).
+  final VoidCallback? onEdit;
+  @override
+  Widget build(BuildContext context) => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      avatar,
+      if (busy)
+        const Positioned.fill(
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      if (editable)
+        Positioned(
+          right: -4,
+          bottom: -4,
+          child: IconButton.filled(
+            tooltip: 'Change profile photo',
+            onPressed: busy ? null : onEdit,
+            visualDensity: VisualDensity.compact,
+            style: IconButton.styleFrom(
+              backgroundColor: _navy,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: const Color(0xFF7A8699),
+              disabledForegroundColor: Colors.white,
+              side: const BorderSide(color: Colors.white, width: 2),
+            ),
+            icon: const Icon(Icons.edit, size: 18),
+          ),
+        ),
+    ],
+  );
+}
+
+/// The Profile & Settings avatar. There is no Save step on that screen, so a
+/// cropped photo is uploaded and committed straight away.
+class _AccountAvatar extends StatefulWidget {
+  const _AccountAvatar({required this.name});
+  final String name;
+  @override
+  State<_AccountAvatar> createState() => _AccountAvatarState();
+}
+
+class _AccountAvatarState extends State<_AccountAvatar> {
+  /// Created on first use; disposing it discards an upload still in flight
+  /// when the user leaves the screen.
+  AvatarDraftController? _draft;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _draft?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _change() async {
+    final appState = context.read<AppState>();
+    final gateway = appState.profileGateway;
+    if (gateway == null || !appState.canEditAvatar || _busy) return;
+    final bytes = await pickAndCropAvatar(context);
+    if (bytes == null || !mounted) return;
+    final draft = _draft ??= AvatarDraftController(gateway);
+    setState(() => _busy = true);
+    try {
+      final error = await draft.upload(bytes, 'avatar.png');
+      if (error != null) {
+        if (mounted) _prototypeNotice(context, error);
+        return;
+      }
+      final uploadId = draft.takeForCommit();
+      if (uploadId == null) return;
+      try {
+        await appState.saveProfile(avatarUploadId: uploadId);
+      } on ProfileApiException catch (error) {
+        // After a timeout or lost connection the update may still have
+        // committed the upload, and a committed upload must never be
+        // discarded; the server clears a stranded one after 24 hours.
+        final ambiguous = error.statusCode == 0 || error.statusCode == 408;
+        if (!ambiguous) gateway.discardAvatarUpload(uploadId).ignore();
+        if (mounted) {
+          _prototypeNotice(
+            context,
+            ambiguous
+                ? error.message
+                : 'Could not update your profile photo. Please try again.',
+          );
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    final user = appState.activeUser;
+    return _EditableAvatar(
+      editable: appState.canEditAvatar,
+      busy: _busy,
+      onEdit: _change,
+      avatar: _Avatar(
+        name: widget.name,
+        color: user?.avatarColor,
+        imageUrl: user?.avatarUrl,
+        onImageError: appState.reportAvatarLoadFailed,
+      ),
+    );
+  }
 }
 
 class _SettingsItem {
