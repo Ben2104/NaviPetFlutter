@@ -83,8 +83,8 @@ class NaviBottomNav extends StatelessWidget {
   }
 
   /// One destination: an icon in a circle with its label underneath. The
-  /// active tab gets a navy ring and a bold label, so it never relies on
-  /// colour alone.
+  /// active tab gets a glowing navy ring and a bold label, so it never relies
+  /// on colour alone.
   Widget _item(
     BuildContext context, {
     required NaviTab tab,
@@ -108,6 +108,7 @@ class NaviBottomNav extends StatelessWidget {
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
@@ -115,6 +116,15 @@ class NaviBottomNav extends StatelessWidget {
                   color: isActive ? AppColors.accentSoft : Colors.transparent,
                   border: isActive
                       ? Border.all(color: AppColors.navy, width: 2)
+                      : null,
+                  boxShadow: isActive
+                      ? [
+                          BoxShadow(
+                            color: AppColors.navy.withValues(alpha: 0.3),
+                            blurRadius: 12,
+                            spreadRadius: 1,
+                          ),
+                        ]
                       : null,
                 ),
                 child: Icon(icon, size: 20, color: foreground),

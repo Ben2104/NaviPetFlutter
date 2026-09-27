@@ -48,4 +48,11 @@ void main() {
     expect(_ring(tester, 'Pet').border, isNull);
     expect(_ring(tester, 'Locations').border, isNull);
   });
+
+  testWidgets('only the active tab glows', (tester) async {
+    await _pump(tester, NaviTab.pets);
+    expect(_ring(tester, 'Pet').boxShadow, isNotEmpty);
+    expect(_ring(tester, 'Calendar').boxShadow, isNull);
+    expect(_ring(tester, 'Locations').boxShadow, isNull);
+  });
 }
