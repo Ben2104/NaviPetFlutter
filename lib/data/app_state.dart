@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'course_class.dart';
 import 'classes_gateway.dart';
+import 'profile_gateway.dart';
 import 'registration_gateway.dart';
 import 'user_account.dart';
 
@@ -32,6 +33,7 @@ class AppState extends ChangeNotifier {
     recoverySessionRefresher,
     Future<void> Function(String newPassword)? recoveryPasswordFallback,
     ClassesGateway? classesGateway,
+    ProfileGateway? profileGateway,
   }) : this._(
          supabase,
          registrationGateway,
@@ -40,6 +42,7 @@ class AppState extends ChangeNotifier {
          recoverySessionRefresher,
          recoveryPasswordFallback,
          classesGateway,
+         profileGateway,
        );
 
   AppState._(
@@ -50,6 +53,7 @@ class AppState extends ChangeNotifier {
     this._recoverySessionRefresher,
     this._recoveryPasswordFallback,
     this._classesGateway,
+    this._profileGateway,
   ) {
     if (_supabase == null) return;
 
@@ -62,6 +66,7 @@ class AppState extends ChangeNotifier {
   final SupabaseClient? _supabase;
   final RegistrationGateway? _registrationGateway;
   final ClassesGateway? _classesGateway;
+  final ProfileGateway? _profileGateway;
   final Future<void> Function(RegistrationVerificationSuccess tokens)?
   _verificationSessionHandler;
   final Future<void> Function(String email)? _signupCodeResender;
@@ -82,6 +87,12 @@ class AppState extends ChangeNotifier {
   Map<String, int> _completionCounts = const {};
   bool _classesBusy = false;
   final Map<String, DateTime> _onlineSessionStarts = {};
+  Future<void>? _profileFetch;
+  String? _profileFetchUserId;
+  DateTime? _profileFetchedAt;
+  String? _avatarRetriedFor;
+  DateTime? _avatarRetriedAt;
+  static const _avatarRetryInterval = Duration(seconds: 30);
 
   bool get isSupabaseConfigured => _supabase != null;
   bool get isAuthenticationConfigured =>
@@ -98,6 +109,96 @@ class AppState extends ChangeNotifier {
   List<CourseClass> get classes => List.unmodifiable(_classes);
   bool get classesBusy => _classesBusy;
   bool get hasPendingPasswordRecovery => _pendingRecoverySession != null;
+
+  /// Null when the backend is not configured.
+  ProfileGateway? get profileGateway => _profileGateway;
+
+  /// Guests cannot edit their avatar: the backend's behaviour for anonymous
+  /// sessions is unverified.
+  bool get canEditAvatar =>
+      _profileGateway != null &&
+      _activeUser != null &&
+      !_activeUser!.isAnonymous;
+
+  /// Reloads the signed avatar URL from the backend. The URL expires after
+  /// about an hour, so this runs on sign-in, token refresh, and app resume.
+  /// [maxAge] skips the request when the last load is at least that recent.
+  /// Failures keep the current URL; the initials avatar covers a missing one.
+  Future<void> refreshProfile({Duration? maxAge}) {
+    final user = _activeUser;
+    if (_profileGateway == null || user == null || user.isAnonymous) {
+      return Future.value();
+    }
+    final fetchedAt = _profileFetchedAt;
+    if (maxAge != null &&
+        fetchedAt != null &&
+        DateTime.now().difference(fetchedAt) < maxAge) {
+      return Future.value();
+    }
+    final inFlight = _profileFetch;
+    if (inFlight != null && _profileFetchUserId == user.id) return inFlight;
+    late final Future<void> fetch;
+    fetch = _fetchProfile(user.id).whenComplete(() {
+      if (identical(_profileFetch, fetch)) _profileFetch = null;
+    });
+    _profileFetchUserId = user.id;
+    return _profileFetch = fetch;
+  }
+
+  Future<void> _fetchProfile(String userId) async {
+    try {
+      final profile = await _profileGateway!.fetchProfile();
+      final current = _activeUser;
+      if (current == null || current.id != userId) return;
+      _profileFetchedAt = DateTime.now();
+      _activeUser = current.copyWith(avatarUrl: () => profile.avatarUrl);
+      notifyListeners();
+    } on Object {
+      // The avatar is optional; sign-in and the rest of the profile do not
+      // depend on it, and this runs unawaited.
+    }
+  }
+
+  /// Called when the avatar image fails to load, most likely because its
+  /// signed URL expired. Refetches at most once per URL and at most once per
+  /// [_avatarRetryInterval], so a permanently broken URL cannot cause a
+  /// refetch loop. Safe to call during build: it never notifies synchronously.
+  void reportAvatarLoadFailed(String url) {
+    if (url != _activeUser?.avatarUrl || url == _avatarRetriedFor) return;
+    final now = DateTime.now();
+    final last = _avatarRetriedAt;
+    if (last != null && now.difference(last) < _avatarRetryInterval) return;
+    _avatarRetriedFor = url;
+    _avatarRetriedAt = now;
+    unawaited(refreshProfile());
+  }
+
+  /// Saves profile edits through the backend and applies the response.
+  /// Throws [ProfileApiException]; a 404 with [avatarUploadId] means that
+  /// upload no longer exists.
+  Future<void> saveProfile({
+    String? displayName,
+    String? avatarUploadId,
+  }) async {
+    final gateway = _profileGateway;
+    final user = _activeUser;
+    if (gateway == null || user == null) {
+      throw StateError('Sign in before editing your profile.');
+    }
+    final profile = await gateway.updateProfile(
+      displayName: displayName,
+      avatarUploadId: avatarUploadId,
+    );
+    final current = _activeUser;
+    if (current == null || current.id != user.id) return;
+    final name = profile.displayName.trim();
+    _profileFetchedAt = DateTime.now();
+    _activeUser = current.copyWith(
+      name: name.isEmpty ? null : name,
+      avatarUrl: () => profile.avatarUrl,
+    );
+    notifyListeners();
+  }
 
   Duration onlineSessionDuration(String classId) {
     final started = _onlineSessionStarts[classId];
@@ -665,6 +766,7 @@ class AppState extends ChangeNotifier {
   Future<void> _applyUser(User? user) async {
     if (user == null) {
       _activeUser = null;
+      _resetProfileFetchState();
       _classes = const [];
       _completionKeys = const {};
       _completionCounts = const {};
@@ -674,10 +776,25 @@ class AppState extends ChangeNotifier {
 
     // Authentication should never wait for optional profile or class queries.
     // User metadata gives the UI an immediate account while those records load.
-    _activeUser = UserAccount.fromSupabase(user);
+    // Auth events for the same user (e.g. token refresh) keep the avatar so
+    // it does not flash back to initials while the new URL loads.
+    final previous = _activeUser;
+    final sameUser = previous?.id == user.id;
+    if (!sameUser) _resetProfileFetchState();
+    _activeUser = UserAccount.fromSupabase(
+      user,
+      avatarUrl: sameUser ? previous?.avatarUrl : null,
+    );
     notifyListeners();
     unawaited(_hydrateUserProfile(user));
     unawaited(refreshClasses());
+    unawaited(refreshProfile());
+  }
+
+  void _resetProfileFetchState() {
+    _profileFetchedAt = null;
+    _avatarRetriedFor = null;
+    _avatarRetriedAt = null;
   }
 
   Future<void> _hydrateUserProfile(User user) async {
@@ -694,7 +811,13 @@ class AppState extends ChangeNotifier {
     }
 
     if (_supabase?.auth.currentUser?.id != user.id) return;
-    _activeUser = UserAccount.fromSupabase(user, profile: profile);
+    // `profiles.avatar_path` is a storage path, not a URL; the avatar URL only
+    // comes from the backend, so keep whichever one is already loaded.
+    _activeUser = UserAccount.fromSupabase(
+      user,
+      profile: profile,
+      avatarUrl: _activeUser?.id == user.id ? _activeUser?.avatarUrl : null,
+    );
     notifyListeners();
   }
 
