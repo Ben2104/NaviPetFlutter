@@ -80,11 +80,11 @@ void main() {
     await _pump(tester, classes: const [], selected: DateTime(2026, 9, 25));
     expect(
       tester.getSemantics(find.text('9/25')),
-      containsSemantics(isSelected: true),
+      isSemantics(isSelected: true),
     );
     expect(
       tester.getSemantics(find.text('9/24')),
-      containsSemantics(isSelected: false),
+      isSemantics(isSelected: false),
     );
   });
 }

@@ -214,7 +214,7 @@ class _ClassEditorSheetState extends State<ClassEditorSheet> {
                       : 'Use your location to check attendance',
                 ),
                 value: _isOnline,
-                activeColor: AppColors.petInk,
+                activeThumbColor: AppColors.petInk,
                 onChanged: (value) => setState(() => _isOnline = value),
               ),
               const SizedBox(height: 16),
