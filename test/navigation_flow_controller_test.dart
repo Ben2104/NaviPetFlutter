@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navipet/data/campus_place.dart';
 import 'package:navipet/data/location_service.dart';
 import 'package:navipet/data/navigation_flow_state.dart';
 import 'package:navipet/data/navigation_models.dart';
@@ -46,6 +47,51 @@ void main() {
     await controller.selectPlace(harness.horn);
 
     expect(recents.saved, [harness.horn.id]);
+  });
+
+  test(
+    'a suggested place resolves to its campus record before saving',
+    () async {
+      final recents = harness.FakeRecents();
+      final controller = harness.build(recents: recents)..openSearch();
+      const suggestion = CampusPlace(
+        id: 'suggested:HC',
+        type: CampusDestinationType.building,
+        title: 'Horn Center',
+        subtitle: 'Popular location',
+        source: CampusPlace.suggestedSource,
+        buildingCode: 'hc',
+        outdoorDestination: harness.hornCoordinate,
+      );
+
+      await controller.selectPlace(suggestion);
+
+      expect(recents.saved, [harness.horn.id]);
+      expect(controller.recents.map((place) => place.id), [harness.horn.id]);
+      final state = controller.state as FlowPlacePreview;
+      expect(state.place.id, harness.horn.id);
+    },
+  );
+
+  test('an unresolved suggestion is previewed but not saved', () async {
+    final recents = harness.FakeRecents();
+    final search = harness.FakeSearchGateway()..results = const [];
+    final controller = harness.build(recents: recents, search: search)
+      ..openSearch();
+    const suggestion = CampusPlace(
+      id: 'suggested:XYZ',
+      type: CampusDestinationType.building,
+      title: 'Somewhere',
+      subtitle: 'Popular location',
+      source: CampusPlace.suggestedSource,
+      outdoorDestination: harness.hornCoordinate,
+    );
+
+    await controller.selectPlace(suggestion);
+
+    expect(controller.state, isA<FlowPlacePreview>());
+    expect(recents.saved, isEmpty);
+    expect(controller.recents, isEmpty);
   });
 
   test('back from a preview returns to search with the query kept', () async {
@@ -198,9 +244,20 @@ void main() {
 
     await controller.startRoute();
     expect(controller.state, isA<FlowActiveNavigation>());
+  });
+
+  test('ending the route returns to an idle, cleared map', () async {
+    final map = harness.RecordingMap();
+    final controller = harness.build(map: map)..openSearch();
+    await controller.selectPlace(harness.horn);
+    await controller.requestDirections();
+    await controller.calculateRoute();
+    await controller.startRoute();
 
     await controller.endRoute();
-    expect(controller.state, isA<FlowRoutePreview>());
+
+    expect(controller.state, isA<FlowIdle>());
+    expect(map.calls.last, 'clear');
   });
 
   test('guidance is refused for a manually chosen origin', () async {
@@ -390,7 +447,7 @@ void main() {
     expect((controller.state as FlowRoutePreview).plan, plan);
   });
 
-  test('back from active navigation behaves like ending the route', () async {
+  test('back from active navigation returns to the route overview', () async {
     final controller = harness.build()..openSearch();
     await controller.selectPlace(harness.horn);
     await controller.requestDirections();

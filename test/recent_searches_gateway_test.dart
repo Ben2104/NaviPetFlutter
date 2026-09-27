@@ -89,6 +89,17 @@ void main() {
     expect((await store.load()).single.name, 'Horn Center');
   });
 
+  test('the remote list replaces stale cached entries', () async {
+    final store = SearchHistoryStore();
+    await store.add(horn.toDestination());
+    // History cleared elsewhere (another device): the remote is empty.
+    final remote = FakeRemote()..remote = const [];
+    final gateway = CachedRecentSearches(remote: remote, cache: store);
+
+    expect(await gateway.list(), isEmpty);
+    expect(await store.load(), isEmpty);
+  });
+
   test('falls back to the cache when the remote fails', () async {
     final store = SearchHistoryStore();
     await store.add(horn.toDestination());

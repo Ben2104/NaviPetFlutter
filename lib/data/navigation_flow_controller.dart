@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'campus_bounds.dart';
 import 'campus_place.dart';
 import 'campus_search_controller.dart';
 import 'campus_search_gateway.dart';
@@ -260,7 +261,9 @@ class NavigationFlowController extends ChangeNotifier {
 
     // Local records are re-resolved so the preview shows current data.
     var resolved = place;
-    if (!place.external && place.source != 'cache') {
+    if (place.isSuggestion) {
+      resolved = await _resolveSuggestion(place);
+    } else if (!place.external && place.source != 'cache') {
       try {
         resolved = await searchGateway.place(place.id);
       } on CampusSearchException {
@@ -296,7 +299,7 @@ class NavigationFlowController extends ChangeNotifier {
       }
       _set(configuring);
       setOrigin(PlaceOrigin(place: destination));
-      unawaited(recentSearches.save(resolved));
+      _recordRecent(resolved);
       return;
     }
 
@@ -308,7 +311,7 @@ class NavigationFlowController extends ChangeNotifier {
       ),
     );
 
-    unawaited(recentSearches.save(resolved));
+    _recordRecent(resolved);
     if (destination != null) {
       await _queueMap(
         () => _map.showPlace(
@@ -316,8 +319,58 @@ class NavigationFlowController extends ChangeNotifier {
           label: destination.name,
           bottomInset: placeSheetInset,
         ),
+        stillCurrent: () {
+          final state = _state;
+          return state is FlowPlacePreview && state.place.id == resolved.id;
+        },
       );
     }
+  }
+
+  /// Suggestions that could not be matched to a campus record carry a
+  /// synthetic id the backend rejects, so they are never recorded.
+  void _recordRecent(CampusPlace place) {
+    if (place.isSuggestion) return;
+    _rememberRecent(place);
+    unawaited(recentSearches.save(place));
+  }
+
+  /// Matches an app-made suggestion to the real campus record, by building
+  /// code first and then by exact title.
+  Future<CampusPlace> _resolveSuggestion(CampusPlace place) async {
+    final code = place.buildingCode?.trim().toLowerCase();
+    final title = place.title.trim().toLowerCase();
+    final queries = [
+      if (code != null && code.isNotEmpty) code,
+      place.title.trim(),
+    ];
+    for (final query in queries) {
+      final List<CampusPlace> found;
+      try {
+        found = filterToCampus(
+          await searchGateway.autocomplete(query, limit: 5),
+        );
+      } on CampusSearchException {
+        continue;
+      }
+      for (final candidate in found) {
+        final candidateCode = candidate.buildingCode?.trim().toLowerCase();
+        if ((code != null && code.isNotEmpty && candidateCode == code) ||
+            candidate.title.trim().toLowerCase() == title) {
+          return candidate;
+        }
+      }
+    }
+    return place;
+  }
+
+  void _rememberRecent(CampusPlace place) {
+    if (place.external || place.outdoorDestination == null) return;
+    _recents = [
+      place,
+      ..._recents.where((item) => item.id != place.id),
+    ].take(3).toList(growable: false);
+    notifyListeners();
   }
 
   Future<void> requestDirections() async {
@@ -432,6 +485,7 @@ class NavigationFlowController extends ChangeNotifier {
           destination: current.destination,
           bottomInset: routeSheetInset,
         ),
+        stillCurrent: () => generation == _generation,
       );
     } on RouteFailure catch (error) {
       if (generation != _generation) return;
@@ -513,6 +567,9 @@ class NavigationFlowController extends ChangeNotifier {
     // Guidance is only offered when the route starts where the user is.
     if (!origin.canStartGuidance) return;
 
+    // Invalidate any preview camera operation that is still queued. The
+    // guidance camera must be the next camera state the user sees.
+    _generation++;
     _set(
       FlowActiveNavigation(
         destination: destination,
@@ -530,14 +587,10 @@ class NavigationFlowController extends ChangeNotifier {
   Future<void> endRoute() async {
     final current = _state;
     if (current is! FlowActiveNavigation) return;
-    _set(
-      FlowRoutePreview(
-        destination: current.destination,
-        origin: current.origin,
-        plan: current.plan,
-        place: current.place,
-      ),
-    );
+    _generation++;
+    _set(const FlowIdle());
+    search.reset();
+    await _queueMap(() => _map.clear());
   }
 
   Future<void> retry() async {
@@ -609,20 +662,35 @@ class NavigationFlowController extends ChangeNotifier {
               label: destination.name,
               bottomInset: placeSheetInset,
             ),
+            stillCurrent: () {
+              final state = _state;
+              return state is FlowPlacePreview &&
+                  state.place.id ==
+                      (place?.id ?? destination.id ?? destination.name);
+            },
           ),
         );
       case FlowRouteSteps():
         // Identical to the user tapping the steps sheet's close affordance
         // — one behaviour per transition, not a second copy of it.
         hideSteps();
-      case FlowActiveNavigation():
-        // Identical to the user tapping "end navigation". Firing without
-        // awaiting is only safe because endRoute() has no `await` before
-        // its `_set` call, so the state update still lands this turn. If
-        // endRoute() ever gains an await before that `_set`, back() would
-        // silently stop updating state synchronously and no test here
-        // would catch it.
-        unawaited(endRoute());
+      case FlowActiveNavigation(
+        :final destination,
+        :final origin,
+        :final plan,
+        :final place,
+      ):
+        // Back (and the "Overview" button) leaves guidance but keeps the
+        // route. Only an explicit, confirmed endRoute() discards it.
+        _generation++;
+        _set(
+          FlowRoutePreview(
+            destination: destination,
+            origin: origin,
+            plan: plan,
+            place: place,
+          ),
+        );
       case FlowIndoorHandoff():
         _generation++;
         _set(const FlowIdle());
@@ -639,8 +707,14 @@ class NavigationFlowController extends ChangeNotifier {
 
   /// Queues [action] behind whatever map work is already in flight, so map
   /// mutations complete in request order instead of finish order.
-  Future<void> _queueMap(Future<void> Function() action) {
-    final result = _mapWork.then((_) => action());
+  Future<void> _queueMap(
+    Future<void> Function() action, {
+    bool Function()? stillCurrent,
+  }) {
+    final result = _mapWork.then<void>((_) async {
+      if (stillCurrent != null && !stillCurrent()) return;
+      await action();
+    });
     // The queue itself must stay resolved even when a call fails, or every
     // later map call would wait forever behind a permanently-rejected
     // future. The caller's own awaited [result] still carries the error.

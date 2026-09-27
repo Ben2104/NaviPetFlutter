@@ -9,11 +9,10 @@ enum NaviTab { menu, location, pets }
 
 /// Shared bottom navigation bar, cloned from the Figma prototype.
 ///
-/// Three slots: a Menu (hamburger) button on the left routing to the Class
-/// Checklist, a raised paw "Pets" floating action button in the centre routing
-/// to Pet Customization, and a Location (pin) button on the right routing to
-/// the Map. Used by the Map, Pet and Checklist screens so they share the same
-/// navigation surface.
+/// Three labelled slots: Calendar on the left routing to the class calendar,
+/// Pet in the centre routing to Pet Customization, and Locations on the right
+/// routing to the Map. Used by the Map, Pet and Calendar screens so they share
+/// the same navigation surface.
 class NaviBottomNav extends StatelessWidget {
   const NaviBottomNav({super.key, required this.active});
 
@@ -56,117 +55,93 @@ class NaviBottomNav extends StatelessWidget {
               ],
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _iconButton(context, tab: NaviTab.menu, icon: Icons.menu),
-                const SizedBox(width: 64), // room for the centre FAB
-                _iconButton(
+                _item(
+                  context,
+                  tab: NaviTab.menu,
+                  icon: Icons.calendar_month_outlined,
+                  label: 'Calendar',
+                ),
+                _item(
+                  context,
+                  tab: NaviTab.pets,
+                  icon: Icons.pets,
+                  label: 'Pet',
+                ),
+                _item(
                   context,
                   tab: NaviTab.location,
                   icon: Icons.location_on_outlined,
+                  label: 'Locations',
                 ),
               ],
             ),
-          ),
-
-          // Centre paw floating action button (Pets).
-          Positioned(
-            top: -24,
-            left: 0,
-            right: 0,
-            child: Center(child: _petsFab(context)),
           ),
         ],
       ),
     );
   }
 
-  Widget _iconButton(
+  /// One destination: an icon in a circle with its label underneath. The
+  /// active tab gets a glowing navy ring and a bold label, so it never relies
+  /// on colour alone.
+  Widget _item(
     BuildContext context, {
     required NaviTab tab,
     required IconData icon,
+    required String label,
   }) {
     final isActive = active == tab;
-    final label = tab == NaviTab.menu ? 'Menu' : 'Map';
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _goTo(context, tab),
+    final foreground = isActive ? AppColors.navy : AppColors.muted;
+    return Expanded(
       child: Semantics(
+        key: ValueKey('nav-$label'),
         button: true,
         selected: isActive,
         label: label,
-        child: Tooltip(
-          message: label,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: isActive ? AppColors.accentSoft : Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-              border: isActive
-                  ? Border.all(color: AppColors.yellow, width: 1.5)
-                  : null,
-              boxShadow: isActive
-                  ? const [
-                      BoxShadow(
-                        color: Color(0x55FDCC00),
-                        blurRadius: 12,
-                        spreadRadius: 1,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Icon(
-              icon,
-              size: 25,
-              color: isActive ? AppColors.petInk : AppColors.faint,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _petsFab(BuildContext context) {
-    final isActive = active == NaviTab.pets;
-    return GestureDetector(
-      onTap: () => _goTo(context, NaviTab.pets),
-      child: Semantics(
-        button: true,
-        selected: isActive,
-        label: 'Pets',
-        child: Tooltip(
-          message: 'Pets',
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-            width: isActive ? 70 : 64,
-            height: isActive ? 70 : 64,
-            decoration: BoxDecoration(
-              color: AppColors.pinOrange,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: AppColors.surface,
-                width: isActive ? 5 : 4,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: isActive
-                      ? const Color(0x66F5A623)
-                      : const Color(0x1A101828),
-                  offset: const Offset(0, 8),
-                  blurRadius: isActive ? 18 : 10,
-                  spreadRadius: isActive ? 3 : 0,
+        excludeSemantics: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _goTo(context, tab),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isActive ? AppColors.accentSoft : Colors.transparent,
+                  border: isActive
+                      ? Border.all(color: AppColors.navy, width: 2)
+                      : null,
+                  boxShadow: isActive
+                      ? [
+                          BoxShadow(
+                            color: AppColors.navy.withValues(alpha: 0.3),
+                            blurRadius: 12,
+                            spreadRadius: 1,
+                          ),
+                        ]
+                      : null,
                 ),
-              ],
-            ),
-            child: const Icon(
-              Icons.pets,
-              size: 27,
-              color: AppColors.surface,
-            ),
+                child: Icon(icon, size: 20, color: foreground),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.2,
+                  color: foreground,
+                  fontWeight: isActive ? FontWeight.w800 : FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ),
       ),
