@@ -25,8 +25,11 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   @override
   void initState() {
     super.initState();
+    // Only the running online-session counters change every second.
     _onlineTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
+      if (mounted && context.read<AppState>().hasRunningOnlineSession) {
+        setState(() {});
+      }
     });
   }
 

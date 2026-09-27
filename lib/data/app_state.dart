@@ -111,6 +111,8 @@ class AppState extends ChangeNotifier {
     return Duration(minutes: minutes > 0 ? minutes : 15);
   }
 
+  bool get hasRunningOnlineSession => _onlineSessionStarts.isNotEmpty;
+
   bool onlineSessionRunning(String classId) =>
       _onlineSessionStarts.containsKey(classId);
 
