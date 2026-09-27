@@ -8,6 +8,7 @@ import '../data/app_state.dart';
 import '../data/course_class.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bottom_nav_bar.dart';
+import '../widgets/class_detail_sheet.dart';
 import '../widgets/class_editor_sheet.dart';
 import '../widgets/schedule_calendar.dart';
 
@@ -20,6 +21,8 @@ class ChecklistScreen extends StatefulWidget {
 
 class _ChecklistScreenState extends State<ChecklistScreen> {
   DateTime _selectedDate = DateTime.now();
+  CalendarView _view = CalendarView.week;
+  int _scrollToNowRequest = 0;
   Timer? _onlineTimer;
 
   @override
@@ -52,6 +55,28 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
     );
   }
 
+  void _showClass(BuildContext context, CourseClass course) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      backgroundColor: AppColors.surface,
+      builder: (sheetContext) => ClassDetailSheet(
+        course: course,
+        completions: context.read<AppState>().completionCountFor(course.id),
+        onEdit: () {
+          Navigator.pop(sheetContext);
+          _edit(context, course);
+        },
+      ),
+    );
+  }
+
+  void _goToToday() => setState(() {
+    _selectedDate = DateTime.now();
+    _scrollToNowRequest++;
+  });
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -65,14 +90,10 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
               context.canPop() ? context.pop() : context.go('/map'),
           icon: const Icon(Icons.arrow_back),
         ),
-        title: const Text('Achievements'),
+        title: const Text('Calendar'),
         actions: [
           IconButton(
-            tooltip: 'Add class',
-            onPressed: () => _edit(context),
-            icon: const Icon(Icons.add_circle, color: AppColors.petInk),
-          ),
-          IconButton(
+            tooltip: 'Account',
             onPressed: () => context.push('/account'),
             icon: const CircleAvatar(
               radius: 16,
@@ -85,22 +106,31 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
       body: RefreshIndicator(
         onRefresh: state.refreshClasses,
         child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.lg),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.md,
+            AppSpacing.lg,
+            AppSpacing.xl,
+          ),
           children: [
             _intro(context),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.lg),
+            _calendarToolbar(),
+            const SizedBox(height: AppSpacing.md),
             ScheduleCalendar(
               classes: state.classes,
               selectedDate: _selectedDate,
+              view: _view,
+              scrollToNowRequest: _scrollToNowRequest,
               onSelectDate: (date) => setState(() => _selectedDate = date),
-              onTapClass: (course) => _edit(context, course),
+              onTapClass: (course) => _showClass(context, course),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.xl),
             _sectionTitle(
               'Class achievements',
-              '${state.classes.length} classes',
+              '${state.classes.length} ${state.classes.length == 1 ? 'class' : 'classes'}',
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             if (state.classesBusy && state.classes.isEmpty)
               const Center(child: CircularProgressIndicator())
             else if (state.classes.isEmpty)
@@ -111,9 +141,9 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: .9,
+                  mainAxisSpacing: AppSpacing.md,
+                  crossAxisSpacing: AppSpacing.md,
+                  mainAxisExtent: 128,
                 ),
                 itemCount: state.classes.length,
                 itemBuilder: (_, index) => _achievementCard(
@@ -122,12 +152,12 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                   state.completionCountFor(state.classes[index].id),
                 ),
               ),
-            const SizedBox(height: 28),
+            const SizedBox(height: AppSpacing.xl),
             _sectionTitle(
               'Daily tasks',
               '${tasks.where((task) => task.done).length}/${tasks.length} done',
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             if (tasks.isEmpty)
               const Text('Add a class to create personalized daily tasks.')
             else
@@ -135,19 +165,107 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _edit(context),
-        backgroundColor: AppColors.yellow,
-        foregroundColor: AppColors.petInk,
-        icon: const Icon(Icons.add),
-        label: const Text('Add class'),
+      // The Add class action sits in its own bar above the tabs so it never
+      // covers the calendar.
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _addClassBar(context, state),
+          const NaviBottomNav(active: NaviTab.menu),
+        ],
       ),
-      bottomNavigationBar: const NaviBottomNav(active: NaviTab.menu),
+    );
+  }
+
+  Widget _calendarToolbar() => Row(
+    children: [
+      Expanded(
+        child: SegmentedButton<CalendarView>(
+          segments: const [
+            ButtonSegment(value: CalendarView.week, label: Text('Week')),
+            ButtonSegment(value: CalendarView.day, label: Text('Day')),
+            ButtonSegment(value: CalendarView.agenda, label: Text('Agenda')),
+          ],
+          selected: {_view},
+          showSelectedIcon: false,
+          onSelectionChanged: (views) => setState(() => _view = views.first),
+          style: SegmentedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: AppColors.petInk,
+            selectedBackgroundColor: AppColors.petInk,
+            selectedForegroundColor: Colors.white,
+            side: const BorderSide(color: AppColors.cardBorder),
+            textStyle: const TextStyle(fontWeight: FontWeight.w700),
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+      ),
+      const SizedBox(width: AppSpacing.sm),
+      OutlinedButton.icon(
+        onPressed: _goToToday,
+        icon: const Icon(Icons.today_outlined, size: 18),
+        label: const Text('Today'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.petInk,
+          backgroundColor: Colors.white,
+          side: const BorderSide(color: AppColors.petInk),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+          visualDensity: VisualDensity.compact,
+        ),
+      ),
+    ],
+  );
+
+  Widget _addClassBar(BuildContext context, AppState state) {
+    final today = state.classes
+        .where((course) => course.occursOn(DateTime.now().weekday))
+        .length;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.sm,
+        AppSpacing.lg,
+        AppSpacing.sm,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.divider)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              today == 0
+                  ? 'No classes today'
+                  : '$today ${today == 1 ? 'class' : 'classes'} today',
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.labelInk,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          FilledButton.icon(
+            onPressed: () => _edit(context),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.yellow,
+              foregroundColor: AppColors.petInk,
+              minimumSize: const Size(0, 40),
+              textStyle: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add class'),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _intro(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
+    padding: const EdgeInsets.symmetric(
+      horizontal: AppSpacing.md,
+      vertical: 10,
+    ),
     decoration: BoxDecoration(
       color: AppColors.petInk,
       borderRadius: BorderRadius.circular(16),
@@ -155,11 +273,11 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
     child: const Row(
       children: [
         CircleAvatar(
-          radius: 27,
+          radius: 22,
           backgroundColor: AppColors.yellow,
           backgroundImage: AssetImage('assets/images/shark_side.png'),
         ),
-        SizedBox(width: 14),
+        SizedBox(width: AppSpacing.md),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,10 +287,10 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
-                  fontSize: 17,
+                  fontSize: 15,
                 ),
               ),
-              SizedBox(height: 4),
+              SizedBox(height: 2),
               Text(
                 'Complete class-aware tasks to grow your achievements.',
                 style: TextStyle(color: Color(0xFFD9E6F4), fontSize: 12),
@@ -187,123 +305,143 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   Widget _sectionTitle(String title, String detail) => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
-      Text(
-        title,
-        style: const TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
-          color: AppColors.petInk,
+      Flexible(
+        child: Text(
+          title,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: AppColors.petInk,
+          ),
         ),
       ),
+      const SizedBox(width: AppSpacing.sm),
       Text(
         detail,
-        style: const TextStyle(fontSize: 12, color: AppColors.muted),
+        style: const TextStyle(fontSize: 13, color: AppColors.muted),
       ),
     ],
   );
 
-  Widget _emptyClasses(BuildContext context) => InkWell(
-    onTap: () => _edit(context),
+  Widget _emptyClasses(BuildContext context) => Material(
+    color: Colors.white,
     borderRadius: BorderRadius.circular(14),
-    child: Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: const Column(
-        children: [
-          Icon(Icons.school_outlined, size: 38, color: AppColors.petInk),
-          SizedBox(height: 8),
-          Text(
-            'Add your first class',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          Text(
-            'Your tasks, achievements, and nearby places will adapt automatically.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.muted, fontSize: 12),
-          ),
-        ],
+    child: InkWell(
+      onTap: () => _edit(context),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: const Column(
+          children: [
+            Icon(Icons.school_outlined, size: 38, color: AppColors.petInk),
+            SizedBox(height: 8),
+            Text(
+              'Add your first class',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            Text(
+              'Your tasks, achievements, and nearby places will adapt automatically.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.muted, fontSize: 13),
+            ),
+          ],
+        ),
       ),
     ),
   );
 
   Widget _achievementCard(BuildContext context, CourseClass course, int count) {
-    final progress = count.clamp(0, 5);
-    return InkWell(
-      onTap: () => _edit(context, course),
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: const Border(
-            left: BorderSide(color: AppColors.yellow, width: 4),
-          ),
-          boxShadow: AppShadows.soft,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Icon(
-              course.isOnline
-                  ? Icons.video_camera_front_outlined
-                  : Icons.workspace_premium_outlined,
-              size: 30,
-              color: AppColors.petInk,
-            ),
-            Column(
+    final progress = count.clamp(0, ClassDetailSheet.goal);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: AppShadows.soft,
+      ),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _showClass(context, course),
+          splashColor: AppColors.yellow.withValues(alpha: .25),
+          highlightColor: AppColors.accentSoft,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  course.courseCode,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
-                ),
-                Text(
-                  course.courseName,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.muted, fontSize: 12),
-                ),
-                Text(
-                  course.locationLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.faint, fontSize: 11),
-                ),
-                const SizedBox(height: 10),
                 Row(
-                  children: List.generate(
-                    5,
-                    (index) => Expanded(
-                      child: Container(
-                        height: 7,
-                        margin: EdgeInsets.only(right: index == 4 ? 0 : 3),
-                        decoration: BoxDecoration(
-                          color: index < progress
-                              ? AppColors.yellow
-                              : AppColors.cardBorder,
-                          borderRadius: BorderRadius.circular(8),
+                  children: [
+                    Icon(
+                      course.isOnline
+                          ? Icons.videocam_outlined
+                          : Icons.workspace_premium_outlined,
+                      size: 20,
+                      color: AppColors.petInk,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        course.courseCode,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: AppColors.petInk,
                         ),
                       ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  course.courseName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.labelInk,
+                    fontSize: 13,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const Spacer(),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          value: progress / ClassDetailSheet.goal,
+                          minHeight: 8,
+                          color: AppColors.yellow,
+                          backgroundColor: AppColors.cardBorder,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(
+                      '$progress/${ClassDetailSheet.goal}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.petInk,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
                 Text(
-                  '$count tasks completed · Tap to edit',
-                  style: const TextStyle(fontSize: 10, color: AppColors.faint),
+                  '$count ${count == 1 ? 'task' : 'tasks'} completed',
+                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
