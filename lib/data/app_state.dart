@@ -1,12 +1,22 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'course_class.dart';
 import 'classes_gateway.dart';
 import 'registration_gateway.dart';
 import 'user_account.dart';
+
+/// Outcome of [AppState.verifyAndToggleTask].
+enum TaskClaimResult {
+  claimed,
+  notToday,
+  sessionTooShort,
+  locationUnavailable,
+  tooFar,
+}
 
 /// App-wide authentication and profile state backed by Supabase.
 class AppState extends ChangeNotifier {
@@ -51,8 +61,6 @@ class AppState extends ChangeNotifier {
 
   final SupabaseClient? _supabase;
   final RegistrationGateway? _registrationGateway;
-  // Kept for when the backend exposes /classes; see refreshClasses().
-  // ignore: unused_field
   final ClassesGateway? _classesGateway;
   final Future<void> Function(RegistrationVerificationSuccess tokens)?
   _verificationSessionHandler;
@@ -73,6 +81,7 @@ class AppState extends ChangeNotifier {
   Set<String> _completionKeys = const {};
   Map<String, int> _completionCounts = const {};
   bool _classesBusy = false;
+  final Map<String, DateTime> _onlineSessionStarts = {};
 
   bool get isSupabaseConfigured => _supabase != null;
   bool get isAuthenticationConfigured =>
@@ -90,17 +99,50 @@ class AppState extends ChangeNotifier {
   bool get classesBusy => _classesBusy;
   bool get hasPendingPasswordRecovery => _pendingRecoverySession != null;
 
+  Duration onlineSessionDuration(String classId) {
+    final started = _onlineSessionStarts[classId];
+    return started == null ? Duration.zero : DateTime.now().difference(started);
+  }
+
+  Duration onlineSessionRequirement(CourseClass course) {
+    final start = _timeMinutes(course.startTime);
+    final end = _timeMinutes(course.endTime);
+    final minutes = end - start;
+    return Duration(minutes: minutes > 0 ? minutes : 15);
+  }
+
+  bool get hasRunningOnlineSession => _onlineSessionStarts.isNotEmpty;
+
+  bool onlineSessionRunning(String classId) =>
+      _onlineSessionStarts.containsKey(classId);
+
+  void startOnlineSession(String classId) {
+    _onlineSessionStarts[classId] ??= DateTime.now();
+    notifyListeners();
+  }
+
+  void stopOnlineSession(String classId) {
+    _onlineSessionStarts.remove(classId);
+    notifyListeners();
+  }
+
   List<DailyClassTask> dailyTasks([DateTime? day]) {
     final date = day ?? DateTime.now();
     final scheduled = _classes.where((course) => course.occursOn(date.weekday));
     final source = scheduled.isEmpty ? _classes.take(3) : scheduled;
     return source.map((course) {
-      final kind = scheduled.isEmpty ? 'prepare' : 'attend';
+      final kind = scheduled.isEmpty
+          ? 'prepare'
+          : course.isOnline
+          ? 'attend_online'
+          : 'attend';
       return DailyClassTask(
         course: course,
         kind: kind,
         label: kind == 'attend'
             ? 'Go to ${course.locationLabel} for ${course.courseCode}'
+            : kind == 'attend_online'
+            ? 'Attend ${course.courseCode} online'
             : 'Prepare for ${course.courseCode}',
         reward: kind == 'attend' ? 10 : 5,
         done: _completionKeys.contains(
@@ -119,18 +161,9 @@ class AppState extends ChangeNotifier {
     _classesBusy = true;
     notifyListeners();
     try {
-      // Classes are persisted in Supabase. The currently deployed NaviPet
-      // backend does not expose a /classes route, so using the optional HTTP
-      // gateway here makes class loading fail with 404 before Supabase can be
-      // queried.
-      final classRows = await client
-          .from('classes')
-          .select()
-          .eq('user_id', user.id)
-          .order('start_time');
-      _classes = (classRows as List<dynamic>)
-          .map((row) => CourseClass.fromJson(row as Map<String, dynamic>))
-          .toList();
+      _classes = await _fetchClasses(client, user.id);
+      // Task completions only live in Supabase, whichever source served the
+      // classes, so they must load on both paths.
       final completionRows = await client
           .from('task_completions')
           .select('class_id, task_date, task_kind')
@@ -145,12 +178,35 @@ class AppState extends ChangeNotifier {
       }
       _completionKeys = keys;
       _completionCounts = counts;
+    } on ClassesApiException catch (error) {
+      _errorMessage = error.message;
     } on PostgrestException catch (error) {
       _errorMessage = error.message;
     } finally {
       _classesBusy = false;
       notifyListeners();
     }
+  }
+
+  /// Loads classes through the NaviPet backend when it is configured and the
+  /// user has a session, falling back to reading Supabase directly.
+  Future<List<CourseClass>> _fetchClasses(
+    SupabaseClient client,
+    String userId,
+  ) async {
+    final gateway = _classesGateway;
+    final token = client.auth.currentSession?.accessToken;
+    if (gateway != null && token != null && token.isNotEmpty) {
+      return gateway.listClasses(token);
+    }
+    final classRows = await client
+        .from('classes')
+        .select()
+        .eq('user_id', userId)
+        .order('start_time');
+    return (classRows as List<dynamic>)
+        .map((row) => CourseClass.fromJson(row as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> saveClass(CourseClassInput input) async {
@@ -160,6 +216,21 @@ class AppState extends ChangeNotifier {
     _classesBusy = true;
     notifyListeners();
     try {
+      final gateway = _classesGateway;
+      final token = client.auth.currentSession?.accessToken;
+      if (gateway != null && token != null && token.isNotEmpty) {
+        if (input.id == null) {
+          await gateway.createClass(accessToken: token, input: input);
+        } else {
+          await gateway.updateClass(
+            accessToken: token,
+            classId: input.id!,
+            input: input,
+          );
+        }
+        await refreshClasses();
+        return;
+      }
       final values = input.toJson(user.id);
       if (input.id == null) {
         await client.from('classes').insert(values);
@@ -175,6 +246,13 @@ class AppState extends ChangeNotifier {
 
   Future<void> deleteClass(String id) async {
     final client = _requireClient();
+    final token = client.auth.currentSession?.accessToken;
+    final gateway = _classesGateway;
+    if (gateway != null && token != null && token.isNotEmpty) {
+      await gateway.deleteClass(accessToken: token, classId: id);
+      await refreshClasses();
+      return;
+    }
     await client.from('classes').delete().eq('id', id);
     await refreshClasses();
   }
@@ -204,6 +282,75 @@ class AppState extends ChangeNotifier {
       });
     }
     await refreshClasses();
+  }
+
+  /// Claims a daily task after checking it may be claimed now: only on the
+  /// day it belongs to, and for attendance, near the class building
+  /// (in person) or after a long enough session (online). Un-checking a
+  /// completed task is always allowed.
+  Future<TaskClaimResult> verifyAndToggleTask(
+    DailyClassTask task,
+    DateTime date,
+  ) async {
+    if (task.done) {
+      await toggleTask(task, date);
+      return TaskClaimResult.claimed;
+    }
+    if (!_isSameDay(date, DateTime.now())) {
+      return TaskClaimResult.notToday;
+    }
+    if (task.kind == 'attend_online') {
+      if (onlineSessionDuration(task.course.id) <
+          onlineSessionRequirement(task.course)) {
+        return TaskClaimResult.sessionTooShort;
+      }
+      stopOnlineSession(task.course.id);
+      await toggleTask(task, date);
+      return TaskClaimResult.claimed;
+    }
+    if (task.kind != 'attend') {
+      await toggleTask(task, date);
+      return TaskClaimResult.claimed;
+    }
+    final Position position;
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        return TaskClaimResult.locationUnavailable;
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return TaskClaimResult.locationUnavailable;
+      }
+      position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+    } on Object {
+      return TaskClaimResult.locationUnavailable;
+    }
+    final meters = Geolocator.distanceBetween(
+      position.latitude,
+      position.longitude,
+      task.course.latitude,
+      task.course.longitude,
+    );
+    if (meters > 150) return TaskClaimResult.tooFar;
+    await toggleTask(task, date);
+    return TaskClaimResult.claimed;
+  }
+
+  static bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  int _timeMinutes(String value) {
+    final parts = value.split(':');
+    return (int.tryParse(parts.first) ?? 0) * 60 +
+        (int.tryParse(parts.elementAt(1)) ?? 0);
   }
 
   Future<AuthActionResult> signIn({

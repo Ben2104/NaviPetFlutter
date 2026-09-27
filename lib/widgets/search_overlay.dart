@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../data/app_state.dart';
 import '../data/campus_place.dart';
 import '../data/campus_search_controller.dart';
+import '../data/course_class.dart';
 import '../data/navigation_flow_controller.dart';
 import '../data/navigation_flow_state.dart';
+import '../data/navigation_models.dart';
 import '../theme/app_theme.dart';
 import 'campus_search_result_tile.dart';
 
@@ -12,6 +16,85 @@ class SearchOverlay extends StatefulWidget {
   const SearchOverlay({super.key, required this.controller});
 
   final NavigationFlowController controller;
+
+  /// Class buildings first, then the curated list, with each building shown
+  /// once (matched by title or building code) and none that is already in
+  /// [recents].
+  static List<CampusPlace> popularPlaces({
+    required List<CourseClass> classes,
+    required List<CampusPlace> recents,
+  }) {
+    final seen = <String>{};
+    Set<String> keys(CampusPlace place) => {
+      place.title.trim().toLowerCase(),
+      if (place.buildingCode case final code? when code.trim().isNotEmpty)
+        code.trim().toLowerCase(),
+    };
+    for (final place in recents) {
+      seen.addAll(keys(place));
+    }
+    final classPlaces = [
+      for (final course in classes)
+        if (!course.isOnline && course.building.trim().isNotEmpty)
+          CampusPlace(
+            id: 'suggested:class-${course.id}',
+            type: CampusDestinationType.building,
+            title: course.building.trim(),
+            subtitle: 'Your class building · ${course.courseCode}',
+            source: CampusPlace.suggestedSource,
+            outdoorDestination: course.coordinate,
+          ),
+    ];
+    final popular = <CampusPlace>[];
+    for (final place in [...classPlaces, ..._popularLocations]) {
+      final placeKeys = keys(place);
+      if (placeKeys.any(seen.contains)) continue;
+      seen.addAll(placeKeys);
+      popular.add(place);
+    }
+    return popular;
+  }
+
+  // Resolved to the real campus record (by building code) when tapped; see
+  // NavigationFlowController.selectPlace.
+  static const _popularLocations = <CampusPlace>[
+    CampusPlace(
+      id: 'suggested:HC',
+      type: CampusDestinationType.building,
+      title: 'Steve and Nini Horn Center',
+      subtitle: 'Popular location',
+      source: CampusPlace.suggestedSource,
+      buildingCode: 'HC',
+      outdoorDestination: NavigationCoordinate(
+        latitude: 33.78372,
+        longitude: -118.11482,
+      ),
+    ),
+    CampusPlace(
+      id: 'suggested:COB',
+      type: CampusDestinationType.building,
+      title: 'College of Business',
+      subtitle: 'Popular location',
+      source: CampusPlace.suggestedSource,
+      buildingCode: 'COB',
+      outdoorDestination: NavigationCoordinate(
+        latitude: 33.78326,
+        longitude: -118.11444,
+      ),
+    ),
+    CampusPlace(
+      id: 'suggested:USU',
+      type: CampusDestinationType.building,
+      title: 'University Student Union',
+      subtitle: 'Food, events, services & lounge',
+      source: CampusPlace.suggestedSource,
+      buildingCode: 'USU',
+      outdoorDestination: NavigationCoordinate(
+        latitude: 33.78305,
+        longitude: -118.11278,
+      ),
+    ),
+  ];
 
   @override
   State<SearchOverlay> createState() => _SearchOverlayState();
@@ -224,9 +307,7 @@ class _SearchOverlayState extends State<SearchOverlay> {
 
   Widget _recents() {
     final recents = widget.controller.recents;
-    if (recents.isEmpty) {
-      return _message('Search a building, parking lot, or campus service.');
-    }
+    final popular = _popularPlaces();
     return ListView(
       padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
       children: [
@@ -247,25 +328,65 @@ class _SearchOverlayState extends State<SearchOverlay> {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              TextButton(
-                onPressed: widget.controller.clearRecents,
-                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-                child: const Text('Clear all'),
-              ),
+              if (recents.isNotEmpty)
+                TextButton(
+                  onPressed: widget.controller.clearRecents,
+                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                  child: const Text('Clear all'),
+                ),
             ],
           ),
         ),
-        for (final place in recents)
-          CampusSearchResultTile(
-            place: place,
-            onTap: () {
-              FocusScope.of(context).unfocus();
-              widget.controller.selectPlace(place);
-            },
+        if (recents.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'No recent searches yet.',
+                style: TextStyle(color: AppColors.muted),
+              ),
+            ),
+          )
+        else
+          for (final place in recents) _placeTile(place),
+        const Divider(height: AppSpacing.xl),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.sm,
           ),
+          child: Text(
+            'Popular locations',
+            style: TextStyle(
+              color: AppColors.navy,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        for (final place in popular) _placeTile(place),
       ],
     );
   }
+
+  List<CampusPlace> _popularPlaces() {
+    // SearchOverlay is also used standalone in widget tests and embeddable
+    // contexts, so class-aware suggestions remain optional.
+    return SearchOverlay.popularPlaces(
+      classes: context.watch<AppState?>()?.classes ?? const [],
+      recents: widget.controller.recents,
+    );
+  }
+
+  Widget _placeTile(CampusPlace place) => CampusSearchResultTile(
+    place: place,
+    onTap: () {
+      FocusScope.of(context).unfocus();
+      widget.controller.selectPlace(place);
+    },
+  );
 
   /// Shown while `configuringRoute` is set, i.e. this search is choosing a
   /// starting point rather than a destination — so a tap here does not look
