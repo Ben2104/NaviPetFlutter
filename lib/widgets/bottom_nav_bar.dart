@@ -87,16 +87,43 @@ class NaviBottomNav extends StatelessWidget {
     required IconData icon,
   }) {
     final isActive = active == tab;
+    final label = tab == NaviTab.menu ? 'Menu' : 'Map';
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _goTo(context, tab),
-      child: SizedBox(
-        width: 48,
-        height: 48,
-        child: Icon(
-          icon,
-          size: 24,
-          color: isActive ? AppColors.petInk : AppColors.faint,
+      child: Semantics(
+        button: true,
+        selected: isActive,
+        label: label,
+        child: Tooltip(
+          message: label,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: isActive ? AppColors.accentSoft : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+              border: isActive
+                  ? Border.all(color: AppColors.yellow, width: 1.5)
+                  : null,
+              boxShadow: isActive
+                  ? const [
+                      BoxShadow(
+                        color: Color(0x55FDCC00),
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Icon(
+              icon,
+              size: 25,
+              color: isActive ? AppColors.petInk : AppColors.faint,
+            ),
+          ),
         ),
       ),
     );
@@ -106,24 +133,42 @@ class NaviBottomNav extends StatelessWidget {
     final isActive = active == NaviTab.pets;
     return GestureDetector(
       onTap: () => _goTo(context, NaviTab.pets),
-      child: Container(
-        width: 64,
-        height: 64,
-        decoration: BoxDecoration(
-          color: AppColors.pinOrange,
-          shape: BoxShape.circle,
-          border: Border.all(color: AppColors.surface, width: 4),
-          boxShadow: [
-            BoxShadow(
-              color: isActive
-                  ? const Color(0x33F5A623)
-                  : const Color(0x1A101828),
-              offset: const Offset(0, 8),
-              blurRadius: 10,
+      child: Semantics(
+        button: true,
+        selected: isActive,
+        label: 'Pets',
+        child: Tooltip(
+          message: 'Pets',
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            width: isActive ? 70 : 64,
+            height: isActive ? 70 : 64,
+            decoration: BoxDecoration(
+              color: AppColors.pinOrange,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: AppColors.surface,
+                width: isActive ? 5 : 4,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: isActive
+                      ? const Color(0x66F5A623)
+                      : const Color(0x1A101828),
+                  offset: const Offset(0, 8),
+                  blurRadius: isActive ? 18 : 10,
+                  spreadRadius: isActive ? 3 : 0,
+                ),
+              ],
             ),
-          ],
+            child: const Icon(
+              Icons.pets,
+              size: 27,
+              color: AppColors.surface,
+            ),
+          ),
         ),
-        child: const Icon(Icons.pets, size: 26, color: AppColors.surface),
       ),
     );
   }
