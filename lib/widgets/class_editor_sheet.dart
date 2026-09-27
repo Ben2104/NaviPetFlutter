@@ -96,31 +96,33 @@ class _ClassEditorSheetState extends State<ClassEditorSheet> {
       var coordinate =
           widget.course?.coordinate ??
           const NavigationCoordinate(latitude: csulbLat, longitude: csulbLng);
-      // Geocoding improves the pin, but it must not prevent a class from
-      // being saved when Mapbox is unavailable or does not recognize a
-      // campus building name.
-      try {
-        if (_isOnline) throw const NavigationServiceException('online');
-        final suggestions = await service
-            .suggestPlaces(
-              '${_building.text}, CSULB',
-              proximity: const NavigationCoordinate(
-                latitude: csulbLat,
-                longitude: csulbLng,
-              ),
-            )
-            .timeout(const Duration(seconds: 8));
-        if (suggestions.isNotEmpty) {
-          coordinate =
-              (await service
-                      .retrievePlace(suggestions.first)
-                      .timeout(const Duration(seconds: 8)))
-                  .coordinate;
+      // Online classes have no campus location to geocode.
+      if (!_isOnline) {
+        // Geocoding improves the pin, but it must not prevent a class from
+        // being saved when Mapbox is unavailable or does not recognize a
+        // campus building name.
+        try {
+          final suggestions = await service
+              .suggestPlaces(
+                '${_building.text}, CSULB',
+                proximity: const NavigationCoordinate(
+                  latitude: csulbLat,
+                  longitude: csulbLng,
+                ),
+              )
+              .timeout(const Duration(seconds: 8));
+          if (suggestions.isNotEmpty) {
+            coordinate =
+                (await service
+                        .retrievePlace(suggestions.first)
+                        .timeout(const Duration(seconds: 8)))
+                    .coordinate;
+          }
+        } on TimeoutException {
+          // Keep the campus fallback and continue saving.
+        } on NavigationServiceException {
+          // Keep the campus fallback and continue saving.
         }
-      } on TimeoutException {
-        // Keep the campus fallback and continue saving.
-      } on NavigationServiceException {
-        // Keep the campus fallback and continue saving.
       }
       if (!mounted) return;
       await context.read<AppState>().saveClass(
