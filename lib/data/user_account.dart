@@ -10,6 +10,7 @@ class UserAccount {
     required this.gems,
     required this.level,
     this.isAnonymous = false,
+    this.avatarUrl,
   });
 
   final String id;
@@ -20,7 +21,15 @@ class UserAccount {
   final int level;
   final bool isAnonymous;
 
-  factory UserAccount.fromSupabase(User user, {Map<String, dynamic>? profile}) {
+  /// Signed avatar URL from the NaviPet backend; it expires after about an
+  /// hour. `null` means show the initials avatar instead.
+  final String? avatarUrl;
+
+  factory UserAccount.fromSupabase(
+    User user, {
+    Map<String, dynamic>? profile,
+    String? avatarUrl,
+  }) {
     final metadata = user.userMetadata ?? const <String, dynamic>{};
     final name = (profile?['display_name'] ?? metadata['display_name'] ?? '')
         .toString()
@@ -39,8 +48,22 @@ class UserAccount {
       gems: _asInt(profile?['gems']),
       level: _asInt(profile?['level'], fallback: 1),
       isAnonymous: user.isAnonymous,
+      avatarUrl: avatarUrl,
     );
   }
+
+  /// [avatarUrl] is a getter so callers can clear it by returning `null`.
+  UserAccount copyWith({String? name, String? Function()? avatarUrl}) =>
+      UserAccount(
+        id: id,
+        name: name ?? this.name,
+        email: email,
+        avatarColor: avatarColor,
+        gems: gems,
+        level: level,
+        isAnonymous: isAnonymous,
+        avatarUrl: avatarUrl == null ? this.avatarUrl : avatarUrl(),
+      );
 
   static String _emailName(String? email) {
     final value = email?.split('@').first.trim() ?? '';
