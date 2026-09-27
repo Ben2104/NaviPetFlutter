@@ -165,11 +165,6 @@ class CachedRecentSearches implements RecentSearchesGateway {
   @override
   Future<void> save(CampusPlace place) async {
     final generation = _localGeneration;
-    try {
-      await remote.save(place);
-    } on Object {
-      // Keeping the local copy is more useful than surfacing this failure.
-    }
     // External/Mapbox results are not CSULB records; caching one would let it
     // resurface indistinguishably from a real campus result on the next
     // remote failure, defeating campus-only filtering.
@@ -178,6 +173,11 @@ class CachedRecentSearches implements RecentSearchesGateway {
         if (generation != _localGeneration) return;
         await cache.add(place.toDestination());
       });
+    }
+    try {
+      await remote.save(place);
+    } on Object {
+      // Keeping the local copy is more useful than surfacing this failure.
     }
   }
 
