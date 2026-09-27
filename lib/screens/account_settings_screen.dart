@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../data/app_state.dart';
+import '../data/avatar_draft_controller.dart';
+import '../data/profile_gateway.dart';
 import '../theme/app_theme.dart';
+import '../widgets/profile_avatar.dart';
 
 const _navy = Color(0xFF001A3D);
 const _page = Color(0xFFFAFAFA);
@@ -13,7 +18,8 @@ class AccountSettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AppState>().activeUser;
+    final appState = context.watch<AppState>();
+    final user = appState.activeUser;
     final name = user?.name.isNotEmpty == true ? user!.name : 'Khoi Do';
     final email = user?.email.isNotEmpty == true
         ? user!.email
@@ -25,7 +31,12 @@ class AccountSettingsScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 32, 20, 48),
         children: [
           Center(
-            child: _Avatar(name: name, color: user?.avatarColor),
+            child: _Avatar(
+              name: name,
+              color: user?.avatarColor,
+              imageUrl: user?.avatarUrl,
+              onImageError: appState.reportAvatarLoadFailed,
+            ),
           ),
           const SizedBox(height: 18),
           Text(
@@ -147,7 +158,11 @@ class AccountSettingsScreen extends StatelessWidget {
 }
 
 class EditProfileScreen extends StatefulWidget {
-  const EditProfileScreen({super.key});
+  const EditProfileScreen({super.key, this.pickImage});
+
+  /// Injected by widget tests; defaults to the photo library.
+  final Future<XFile?> Function()? pickImage;
+
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
 }
@@ -155,26 +170,122 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _name;
   String _role = 'Student';
+
+  /// Null when the avatar cannot be edited (guest session or no backend).
+  AvatarDraftController? _avatar;
+  bool _saving = false;
+
   @override
   void initState() {
     super.initState();
-    final current = context.read<AppState>().activeUser?.name;
+    final appState = context.read<AppState>();
+    final current = appState.activeUser?.name;
     _name = TextEditingController(
       text: current?.isNotEmpty == true ? current : 'Khoi Do',
     );
+    final gateway = appState.profileGateway;
+    if (gateway != null && appState.canEditAvatar) {
+      _avatar = AvatarDraftController(gateway)..addListener(_onAvatarChanged);
+    }
+  }
+
+  void _onAvatarChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    // Leaving without saving discards the pending upload (fire-and-forget).
+    _avatar
+      ?..removeListener(_onAvatarChanged)
+      ..dispose();
     _name.dispose();
     super.dispose();
   }
 
+  static Future<XFile?> _pickFromLibrary() => ImagePicker().pickImage(
+    source: ImageSource.gallery,
+    imageQuality: 85,
+    maxWidth: 1024,
+  );
+
+  Future<void> _pickAvatar() async {
+    final avatar = _avatar;
+    if (avatar == null || _saving) return;
+    final XFile? file;
+    try {
+      file = await (widget.pickImage ?? _pickFromLibrary)();
+    } on PlatformException {
+      if (mounted) _prototypeNotice(context, 'Could not open your photos.');
+      return;
+    }
+    if (file == null || !mounted) return;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    final error = await avatar.upload(bytes, file.name);
+    if (error != null && mounted) _prototypeNotice(context, error);
+  }
+
+  Future<void> _save() async {
+    final appState = context.read<AppState>();
+    final avatar = _avatar;
+    final user = appState.activeUser;
+    if (avatar == null || user == null) {
+      _prototypeNotice(
+        context,
+        'Profile changes saved locally for this prototype.',
+      );
+      context.pop();
+      return;
+    }
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      _prototypeNotice(context, 'Display name cannot be blank.');
+      return;
+    }
+    final nameChanged = name != user.name;
+    if (avatar.isUploading) return;
+    if (!nameChanged && avatar.pendingUploadId == null) {
+      context.pop();
+      return;
+    }
+
+    setState(() => _saving = true);
+    final uploadId = avatar.takeForCommit();
+    try {
+      await appState.saveProfile(
+        displayName: nameChanged ? name : null,
+        avatarUploadId: uploadId,
+      );
+      if (!mounted) return;
+      _prototypeNotice(context, 'Profile saved.');
+      context.pop();
+    } on ProfileApiException catch (error) {
+      final expired = error.statusCode == 404 && uploadId != null;
+      if (uploadId != null) {
+        avatar.restoreAfterFailedCommit(uploadId, expired: expired);
+      }
+      if (!mounted) return;
+      _prototypeNotice(
+        context,
+        expired
+            ? AvatarDraftController.expiredMessage
+            : error.statusCode == 0 || error.statusCode == 408
+            ? error.message
+            : 'Could not save your profile. Please try again.',
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final email =
-        context.watch<AppState>().activeUser?.email ??
-        'khoi.do@student.csulb.edu';
+    final appState = context.watch<AppState>();
+    final email = appState.activeUser?.email ?? 'khoi.do@student.csulb.edu';
+    final avatar = _avatar;
+    final uploading = avatar?.isUploading ?? false;
+    final previewUrl = avatar?.previewUrl;
     return Scaffold(
       backgroundColor: _page,
       appBar: _appBar(context, 'Edit Profile'),
@@ -182,16 +293,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: FilledButton.icon(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Profile changes saved locally for this prototype.',
-                  ),
-                ),
-              );
-              context.pop();
-            },
+            // Saving mid-upload would commit the previous (or no) photo.
+            onPressed: _saving || uploading ? null : _save,
             icon: const Icon(Icons.save_outlined, size: 18),
             label: const Text('Save Changes'),
             style: _filledStyle(),
@@ -203,12 +306,46 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         children: [
           const SizedBox(height: 4),
           Center(
-            child: _Avatar(name: _name.text, color: AppColors.blue, radius: 48),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                _Avatar(
+                  name: _name.text,
+                  color: AppColors.blue,
+                  radius: 48,
+                  imageUrl: previewUrl ?? appState.activeUser?.avatarUrl,
+                  // A failed preview is not the saved avatar; refetching the
+                  // profile would not help it.
+                  onImageError: previewUrl == null
+                      ? appState.reportAvatarLoadFailed
+                      : null,
+                ),
+                if (uploading)
+                  const Positioned.fill(
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                if (avatar != null)
+                  Positioned(
+                    right: -4,
+                    bottom: -4,
+                    child: IconButton.filled(
+                      tooltip: 'Change profile photo',
+                      onPressed: _saving ? null : _pickAvatar,
+                      style: IconButton.styleFrom(
+                        backgroundColor: _navy,
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.photo_camera_outlined, size: 20),
+                    ),
+                  ),
+              ],
+            ),
           ),
           const SizedBox(height: 24),
           _label('Display Name'),
           TextField(
             controller: _name,
+            inputFormatters: [LengthLimitingTextInputFormatter(80)],
             decoration: _fieldDecoration(Icons.badge_outlined),
           ),
           const SizedBox(height: 16),
@@ -261,7 +398,8 @@ class ManageAccountScreen extends StatelessWidget {
   const ManageAccountScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AppState>().activeUser;
+    final appState = context.watch<AppState>();
+    final user = appState.activeUser;
     final name = user?.name.isNotEmpty == true ? user!.name : 'Khoi Do';
     final email = user?.email.isNotEmpty == true
         ? user!.email
@@ -275,7 +413,13 @@ class ManageAccountScreen extends StatelessWidget {
           _plainCard(
             Row(
               children: [
-                _Avatar(name: name, color: user?.avatarColor, radius: 30),
+                _Avatar(
+                  name: name,
+                  color: user?.avatarColor,
+                  radius: 30,
+                  imageUrl: user?.avatarUrl,
+                  onImageError: appState.reportAvatarLoadFailed,
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -678,24 +822,32 @@ Widget _plainCard(Widget child) => Container(
 );
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.name, this.color, this.radius = 46});
+  const _Avatar({
+    required this.name,
+    this.color,
+    this.radius = 46,
+    this.imageUrl,
+    this.onImageError,
+  });
   final String name;
   final Color? color;
   final double radius;
+  final String? imageUrl;
+  final ValueChanged<String>? onImageError;
   @override
   Widget build(BuildContext context) => CircleAvatar(
     radius: radius + 2,
     backgroundColor: _navy,
-    child: CircleAvatar(
-      radius: radius,
-      backgroundColor: color ?? AppColors.blue,
-      child: Text(
-        name.isEmpty ? '?' : name[0].toUpperCase(),
-        style: TextStyle(
-          fontSize: radius * .72,
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-        ),
+    child: ProfileAvatar(
+      name: name,
+      color: color ?? AppColors.blue,
+      size: radius * 2,
+      imageUrl: imageUrl,
+      onImageError: onImageError,
+      initialStyle: TextStyle(
+        fontSize: radius * .72,
+        color: Colors.white,
+        fontWeight: FontWeight.w700,
       ),
     ),
   );
