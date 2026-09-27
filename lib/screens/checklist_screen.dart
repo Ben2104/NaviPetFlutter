@@ -544,17 +544,22 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
     DailyClassTask task,
   ) async {
     try {
-      final completed = await state.verifyAndToggleTask(task, _selectedDate);
-      if (!completed && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              task.kind == 'attend_online'
-                  ? 'Keep the online session running for the scheduled class duration before claiming points.'
-                  : 'You need to be near the class building to complete this task.',
-            ),
-          ),
-        );
+      final result = await state.verifyAndToggleTask(task, _selectedDate);
+      final message = switch (result) {
+        TaskClaimResult.claimed => null,
+        TaskClaimResult.notToday =>
+          'Tasks can only be completed on the day they are scheduled.',
+        TaskClaimResult.sessionTooShort =>
+          'Keep the online session running for the scheduled class duration before claiming points.',
+        TaskClaimResult.locationUnavailable =>
+          'Turn on location access to check in to this class.',
+        TaskClaimResult.tooFar =>
+          'You need to be near the class building to complete this task.',
+      };
+      if (message != null && context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
       }
     } catch (error) {
       if (context.mounted) {

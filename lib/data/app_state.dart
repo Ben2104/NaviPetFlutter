@@ -9,6 +9,15 @@ import 'classes_gateway.dart';
 import 'registration_gateway.dart';
 import 'user_account.dart';
 
+/// Outcome of [AppState.verifyAndToggleTask].
+enum TaskClaimResult {
+  claimed,
+  notToday,
+  sessionTooShort,
+  locationUnavailable,
+  tooFar,
+}
+
 /// App-wide authentication and profile state backed by Supabase.
 class AppState extends ChangeNotifier {
   AppState({
@@ -273,55 +282,68 @@ class AppState extends ChangeNotifier {
     await refreshClasses();
   }
 
-  /// Completes an in-person attendance task only when the current device
-  /// position is close to the saved class building. Online classes can be
-  /// completed without a location check.
-  Future<bool> verifyAndToggleTask(DailyClassTask task, DateTime date) async {
+  /// Claims a daily task after checking it may be claimed now: only on the
+  /// day it belongs to, and for attendance, near the class building
+  /// (in person) or after a long enough session (online). Un-checking a
+  /// completed task is always allowed.
+  Future<TaskClaimResult> verifyAndToggleTask(
+    DailyClassTask task,
+    DateTime date,
+  ) async {
     if (task.done) {
       await toggleTask(task, date);
-      return true;
+      return TaskClaimResult.claimed;
+    }
+    if (!_isSameDay(date, DateTime.now())) {
+      return TaskClaimResult.notToday;
     }
     if (task.kind == 'attend_online') {
       if (onlineSessionDuration(task.course.id) <
           onlineSessionRequirement(task.course)) {
-        return false;
+        return TaskClaimResult.sessionTooShort;
       }
       stopOnlineSession(task.course.id);
       await toggleTask(task, date);
-      return true;
+      return TaskClaimResult.claimed;
     }
     if (task.kind != 'attend') {
       await toggleTask(task, date);
-      return true;
+      return TaskClaimResult.claimed;
     }
-    if (!await Geolocator.isLocationServiceEnabled()) return false;
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      return false;
-    }
+    final Position position;
     try {
-      final position = await Geolocator.getCurrentPosition(
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        return TaskClaimResult.locationUnavailable;
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return TaskClaimResult.locationUnavailable;
+      }
+      position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
         ),
       );
-      final meters = Geolocator.distanceBetween(
-        position.latitude,
-        position.longitude,
-        task.course.latitude,
-        task.course.longitude,
-      );
-      if (meters > 150) return false;
-      await toggleTask(task, date);
-      return true;
     } on Object {
-      return false;
+      return TaskClaimResult.locationUnavailable;
     }
+    final meters = Geolocator.distanceBetween(
+      position.latitude,
+      position.longitude,
+      task.course.latitude,
+      task.course.longitude,
+    );
+    if (meters > 150) return TaskClaimResult.tooFar;
+    await toggleTask(task, date);
+    return TaskClaimResult.claimed;
   }
+
+  static bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   int _timeMinutes(String value) {
     final parts = value.split(':');
