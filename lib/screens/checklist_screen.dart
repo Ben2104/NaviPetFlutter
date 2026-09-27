@@ -9,6 +9,7 @@ import '../data/course_class.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/class_editor_sheet.dart';
+import '../widgets/schedule_calendar.dart';
 
 class ChecklistScreen extends StatefulWidget {
   const ChecklistScreen({super.key});
@@ -85,7 +86,12 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
           children: [
             _intro(context),
             const SizedBox(height: 24),
-            _scheduleCalendar(state.classes),
+            ScheduleCalendar(
+              classes: state.classes,
+              selectedDate: _selectedDate,
+              onSelectDate: (date) => setState(() => _selectedDate = date),
+              onTapClass: (course) => _edit(context, course),
+            ),
             const SizedBox(height: 24),
             _sectionTitle(
               'Daily tasks',
@@ -108,200 +114,6 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
       ),
       bottomNavigationBar: const NaviBottomNav(active: NaviTab.menu),
     );
-  }
-
-  Widget _scheduleCalendar(List<CourseClass> classes) {
-    final today = DateTime.now();
-    final start = today.subtract(Duration(days: today.weekday - 1));
-    const dayWidth = 96.0;
-    const timeWidth = 58.0;
-    const rowHeight = 68.0;
-    const startHour = 8;
-    const endHour = 19;
-    final gridHeight = (endHour - startHour) * rowHeight;
-    final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: AppShadows.soft,
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.all(12),
-        child: SizedBox(
-          width: timeWidth + dayWidth * 7,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Schedule',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.petInk,
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 42,
-                child: Row(
-                  children: [
-                    const SizedBox(width: timeWidth),
-                    ...List.generate(7, (index) {
-                      final date = start.add(Duration(days: index));
-                      return SizedBox(
-                        width: dayWidth,
-                        child: GestureDetector(
-                          onTap: () => setState(() => _selectedDate = date),
-                          child: Column(
-                            children: [
-                              Text(
-                                dayNames[index],
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.muted,
-                                ),
-                              ),
-                              Text(
-                                '${date.month}/${date.day}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.petInk,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              ),
-              SizedBox(
-                height: gridHeight,
-                child: Stack(
-                  children: [
-                    for (var row = 0; row <= endHour - startHour; row++)
-                      Positioned(
-                        top: row * rowHeight,
-                        left: 0,
-                        right: 0,
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: timeWidth,
-                              child: Text(
-                                _hourLabel(startHour + row),
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: AppColors.muted,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              width: dayWidth * 7,
-                              height: 1,
-                              color: AppColors.cardBorder,
-                            ),
-                          ],
-                        ),
-                      ),
-                    for (var day = 0; day < 7; day++)
-                      Positioned(
-                        left: timeWidth + day * dayWidth,
-                        top: 0,
-                        bottom: 0,
-                        child: Container(width: 1, color: AppColors.cardBorder),
-                      ),
-                    for (final course in classes)
-                      for (final weekday in course.weekdays)
-                        if (weekday >= 1 && weekday <= 7)
-                          _classBlock(
-                            course,
-                            weekday - 1,
-                            dayWidth,
-                            timeWidth,
-                            rowHeight,
-                            startHour,
-                          ),
-                  ],
-                ),
-              ),
-              if (classes.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(top: 12),
-                  child: Text(
-                    'Add a class to populate your schedule.',
-                    style: TextStyle(color: AppColors.muted),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _hourLabel(int hour) {
-    final suffix = hour >= 12 ? 'PM' : 'AM';
-    final display = hour % 12 == 0 ? 12 : hour % 12;
-    return '$display:00 $suffix';
-  }
-
-  Widget _classBlock(
-    CourseClass course,
-    int day,
-    double dayWidth,
-    double timeWidth,
-    double rowHeight,
-    int startHour,
-  ) {
-    final start = _minutes(course.startTime);
-    final end = _minutes(course.endTime);
-    final top = ((start - startHour * 60) / 60 * rowHeight)
-        .clamp(0.0, 740.0)
-        .toDouble();
-    final height = (((end - start) / 60 * rowHeight).clamp(
-      42.0,
-      740.0,
-    )).toDouble();
-    return Positioned(
-      left: timeWidth + day * dayWidth + 4,
-      top: top,
-      width: dayWidth - 8,
-      height: height,
-      child: GestureDetector(
-        onTap: () => _edit(context, course),
-        child: Container(
-          padding: const EdgeInsets.all(5),
-          decoration: BoxDecoration(
-            color: course.isOnline
-                ? const Color(0xFFD9E8F7)
-                : const Color(0xFFC5DDA2),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: AppColors.petInk.withValues(alpha: .18)),
-          ),
-          child: Text(
-            '${course.courseCode}\n${course.courseName}\n${course.startTime}-${course.endTime}\n${course.locationLabel}',
-            maxLines: 8,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 10,
-              height: 1.15,
-              color: AppColors.petInk,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  int _minutes(String value) {
-    final parts = value.split(':');
-    return (int.tryParse(parts.first) ?? 8) * 60 +
-        (int.tryParse(parts.elementAt(1)) ?? 0);
   }
 
   Widget _intro(BuildContext context) => Container(
