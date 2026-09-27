@@ -94,6 +94,13 @@ class CampusPlace {
 
   bool get isLocal => !external && source != 'mapbox';
 
+  /// [source] of a place the app suggests on its own (a popular location or
+  /// a class building). Its [id] is synthetic, so it must be resolved to a
+  /// real campus record before it can be stored as a recent search.
+  static const suggestedSource = 'suggested';
+
+  bool get isSuggestion => source == suggestedSource;
+
   NaviDestination toDestination() {
     final outdoor = outdoorDestination;
     if (outdoor == null) {

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'campus_bounds.dart';
 import 'campus_place.dart';
 import 'campus_search_controller.dart';
 import 'campus_search_gateway.dart';
@@ -260,7 +261,9 @@ class NavigationFlowController extends ChangeNotifier {
 
     // Local records are re-resolved so the preview shows current data.
     var resolved = place;
-    if (!place.external && place.source != 'cache') {
+    if (place.isSuggestion) {
+      resolved = await _resolveSuggestion(place);
+    } else if (!place.external && place.source != 'cache') {
       try {
         resolved = await searchGateway.place(place.id);
       } on CampusSearchException {
@@ -296,8 +299,7 @@ class NavigationFlowController extends ChangeNotifier {
       }
       _set(configuring);
       setOrigin(PlaceOrigin(place: destination));
-      _rememberRecent(resolved);
-      unawaited(recentSearches.save(resolved));
+      _recordRecent(resolved);
       return;
     }
 
@@ -309,8 +311,7 @@ class NavigationFlowController extends ChangeNotifier {
       ),
     );
 
-    _rememberRecent(resolved);
-    unawaited(recentSearches.save(resolved));
+    _recordRecent(resolved);
     if (destination != null) {
       await _queueMap(
         () => _map.showPlace(
@@ -324,6 +325,43 @@ class NavigationFlowController extends ChangeNotifier {
         },
       );
     }
+  }
+
+  /// Suggestions that could not be matched to a campus record carry a
+  /// synthetic id the backend rejects, so they are never recorded.
+  void _recordRecent(CampusPlace place) {
+    if (place.isSuggestion) return;
+    _rememberRecent(place);
+    unawaited(recentSearches.save(place));
+  }
+
+  /// Matches an app-made suggestion to the real campus record, by building
+  /// code first and then by exact title.
+  Future<CampusPlace> _resolveSuggestion(CampusPlace place) async {
+    final code = place.buildingCode?.trim().toLowerCase();
+    final title = place.title.trim().toLowerCase();
+    final queries = [
+      if (code != null && code.isNotEmpty) code,
+      place.title.trim(),
+    ];
+    for (final query in queries) {
+      final List<CampusPlace> found;
+      try {
+        found = filterToCampus(
+          await searchGateway.autocomplete(query, limit: 5),
+        );
+      } on CampusSearchException {
+        continue;
+      }
+      for (final candidate in found) {
+        final candidateCode = candidate.buildingCode?.trim().toLowerCase();
+        if ((code != null && code.isNotEmpty && candidateCode == code) ||
+            candidate.title.trim().toLowerCase() == title) {
+          return candidate;
+        }
+      }
+    }
+    return place;
   }
 
   void _rememberRecent(CampusPlace place) {

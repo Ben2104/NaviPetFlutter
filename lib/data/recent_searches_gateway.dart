@@ -145,18 +145,7 @@ class CachedRecentSearches implements RecentSearchesGateway {
   Future<List<CampusPlace>> list() async {
     final generation = _localGeneration;
     try {
-      final remotePlaces = filterToCampus(await remote.list());
-      // Keep local entries as a safety net when the backend has not yet
-      // returned a newly saved search or only returns a partial history.
-      final localPlaces = filterToCampus(
-        (await cache.load()).map(_fromDestination).toList(growable: false),
-      );
-      final places = <CampusPlace>[];
-      for (final place in [...remotePlaces, ...localPlaces]) {
-        if (places.any((item) => item.id == place.id)) continue;
-        places.add(place);
-        if (places.length == SearchHistoryStore.maxItems) break;
-      }
+      final places = filterToCampus(await remote.list());
       await _queueLocal(() async {
         if (generation != _localGeneration) return;
         await _replaceCache(places);

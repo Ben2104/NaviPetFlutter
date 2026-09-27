@@ -21,35 +21,40 @@ class SearchOverlay extends StatefulWidget {
 }
 
 class _SearchOverlayState extends State<SearchOverlay> {
+  // Resolved to the real campus record (by building code) when tapped; see
+  // NavigationFlowController.selectPlace.
   static const _popularLocations = <CampusPlace>[
     CampusPlace(
-      id: 'horn-center',
+      id: 'suggested:HC',
       type: CampusDestinationType.building,
-      title: 'CSULB Horn Center',
-      subtitle: '1250 N Bellflower Blvd, Long Beach, California 90815',
-      source: 'cache',
+      title: 'Steve and Nini Horn Center',
+      subtitle: 'Popular location',
+      source: CampusPlace.suggestedSource,
+      buildingCode: 'HC',
       outdoorDestination: NavigationCoordinate(
         latitude: 33.78372,
         longitude: -118.11482,
       ),
     ),
     CampusPlace(
-      id: 'college-of-business',
+      id: 'suggested:COB',
       type: CampusDestinationType.building,
       title: 'College of Business',
-      subtitle: '1250 N Bellflower Blvd, Long Beach, California 90815',
-      source: 'cache',
+      subtitle: 'Popular location',
+      source: CampusPlace.suggestedSource,
+      buildingCode: 'COB',
       outdoorDestination: NavigationCoordinate(
         latitude: 33.78326,
         longitude: -118.11444,
       ),
     ),
     CampusPlace(
-      id: 'university-student-union',
+      id: 'suggested:USU',
       type: CampusDestinationType.building,
       title: 'University Student Union',
       subtitle: 'Food, events, services & lounge',
-      source: 'cache',
+      source: CampusPlace.suggestedSource,
+      buildingCode: 'USU',
       outdoorDestination: NavigationCoordinate(
         latitude: 33.78305,
         longitude: -118.11278,
@@ -330,7 +335,7 @@ class _SearchOverlayState extends State<SearchOverlay> {
   List<CampusPlace> _popularPlaces() {
     // SearchOverlay is also used standalone in widget tests and embeddable
     // contexts, so class-aware suggestions remain optional.
-    final classes = context.read<AppState?>()?.classes ?? const [];
+    final classes = context.watch<AppState?>()?.classes ?? const [];
     final classPlaces = <CampusPlace>[];
     final seen = <String>{};
     for (final course in classes) {
@@ -339,11 +344,11 @@ class _SearchOverlayState extends State<SearchOverlay> {
       if (!seen.add(key)) continue;
       classPlaces.add(
         CampusPlace(
-          id: 'class-${course.id}',
+          id: 'suggested:class-${course.id}',
           type: CampusDestinationType.building,
           title: course.building.trim(),
           subtitle: 'Your class building · ${course.courseCode}',
-          source: 'classes',
+          source: CampusPlace.suggestedSource,
           outdoorDestination: course.coordinate,
         ),
       );
