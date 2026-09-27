@@ -52,8 +52,6 @@ class AppState extends ChangeNotifier {
 
   final SupabaseClient? _supabase;
   final RegistrationGateway? _registrationGateway;
-  // Kept for when the backend exposes /classes; see refreshClasses().
-  // ignore: unused_field
   final ClassesGateway? _classesGateway;
   final Future<void> Function(RegistrationVerificationSuccess tokens)?
   _verificationSessionHandler;
@@ -152,24 +150,9 @@ class AppState extends ChangeNotifier {
     _classesBusy = true;
     notifyListeners();
     try {
-      final gateway = _classesGateway;
-      final token = client.auth.currentSession?.accessToken;
-      if (gateway != null && token != null && token.isNotEmpty) {
-        _classes = await gateway.listClasses(token);
-        return;
-      }
-      // Classes are persisted in Supabase. The currently deployed NaviPet
-      // backend does not expose a /classes route, so using the optional HTTP
-      // gateway here makes class loading fail with 404 before Supabase can be
-      // queried.
-      final classRows = await client
-          .from('classes')
-          .select()
-          .eq('user_id', user.id)
-          .order('start_time');
-      _classes = (classRows as List<dynamic>)
-          .map((row) => CourseClass.fromJson(row as Map<String, dynamic>))
-          .toList();
+      _classes = await _fetchClasses(client, user.id);
+      // Task completions only live in Supabase, whichever source served the
+      // classes, so they must load on both paths.
       final completionRows = await client
           .from('task_completions')
           .select('class_id, task_date, task_kind')
@@ -192,6 +175,27 @@ class AppState extends ChangeNotifier {
       _classesBusy = false;
       notifyListeners();
     }
+  }
+
+  /// Loads classes through the NaviPet backend when it is configured and the
+  /// user has a session, falling back to reading Supabase directly.
+  Future<List<CourseClass>> _fetchClasses(
+    SupabaseClient client,
+    String userId,
+  ) async {
+    final gateway = _classesGateway;
+    final token = client.auth.currentSession?.accessToken;
+    if (gateway != null && token != null && token.isNotEmpty) {
+      return gateway.listClasses(token);
+    }
+    final classRows = await client
+        .from('classes')
+        .select()
+        .eq('user_id', userId)
+        .order('start_time');
+    return (classRows as List<dynamic>)
+        .map((row) => CourseClass.fromJson(row as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> saveClass(CourseClassInput input) async {
