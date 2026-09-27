@@ -99,7 +99,9 @@ Future<Uint8List> renderAvatarCrop(
 }
 
 /// Lets the user drag and pinch [image] under a circular guide, then pops
-/// with the cropped PNG bytes, or `null` on cancel. Does not dispose [image].
+/// with the cropped PNG bytes, or `null` on cancel. The screen paints its own
+/// clone of [image] (it keeps painting through the pop animation), so the
+/// caller may dispose [image] as soon as the route's future completes.
 class AvatarCropScreen extends StatefulWidget {
   const AvatarCropScreen({super.key, required this.image});
 
@@ -113,6 +115,7 @@ class _AvatarCropScreenState extends State<AvatarCropScreen> {
   static const _gutter = 24.0;
   static const _barSpace = 120.0;
 
+  late final ui.Image _image = widget.image.clone();
   AvatarCropTransform? _transform;
   AvatarCropTransform? _gestureStart;
   Offset _focalStart = Offset.zero;
@@ -122,7 +125,13 @@ class _AvatarCropScreenState extends State<AvatarCropScreen> {
   bool _encoding = false;
 
   Size get _imageSize =>
-      Size(widget.image.width.toDouble(), widget.image.height.toDouble());
+      Size(_image.width.toDouble(), _image.height.toDouble());
+
+  @override
+  void dispose() {
+    _image.dispose();
+    super.dispose();
+  }
 
   AvatarCropTransform _current() =>
       (_transform ?? AvatarCropTransform.initial(_imageSize, _diameter))
@@ -135,7 +144,7 @@ class _AvatarCropScreenState extends State<AvatarCropScreen> {
     setState(() => _encoding = true);
     try {
       final bytes = await renderAvatarCrop(
-        widget.image,
+        _image,
         _current().sourceRect(_imageSize, _diameter),
       );
       if (mounted) Navigator.of(context).pop(bytes);
@@ -193,7 +202,7 @@ class _AvatarCropScreenState extends State<AvatarCropScreen> {
                       },
                 child: CustomPaint(
                   painter: _CropPainter(
-                    image: widget.image,
+                    image: _image,
                     transform: transform,
                     diameter: _diameter,
                   ),
