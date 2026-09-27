@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -1121,4 +1122,33 @@ void _showDeleteDialog(BuildContext context) => showDialog<void>(
       ),
     ],
   ),
+);
+
+@Preview(group: 'Avatar', name: 'Pencil badge', size: Size(220, 220))
+Widget editableAvatarPreview() => _avatarPreviewFrame(
+  _EditableAvatar(
+    avatar: const _Avatar(name: 'Jane Doe'),
+    editable: true,
+    onEdit: () {},
+  ),
+);
+
+@Preview(group: 'Avatar', name: 'Uploading', size: Size(220, 220))
+Widget uploadingAvatarPreview() => _avatarPreviewFrame(
+  _EditableAvatar(
+    avatar: const _Avatar(name: 'Jane Doe'),
+    editable: true,
+    busy: true,
+    onEdit: () {},
+  ),
+);
+
+@Preview(group: 'Avatar', name: 'Guest (no pencil)', size: Size(220, 220))
+Widget guestAvatarPreview() => _avatarPreviewFrame(
+  const _EditableAvatar(avatar: _Avatar(name: 'Guest'), editable: false),
+);
+
+Widget _avatarPreviewFrame(Widget child) => Material(
+  color: _page,
+  child: Center(child: child),
 );

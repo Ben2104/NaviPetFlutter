@@ -64,3 +64,5 @@ app.*.map.json
 
 # OS files
 Thumbs.db
+# Widget Preview related
+.widget_preview/
