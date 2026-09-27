@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../data/app_state.dart';
 import '../data/campus_place.dart';
 import '../data/campus_search_controller.dart';
+import '../data/course_class.dart';
 import '../data/navigation_flow_controller.dart';
 import '../data/navigation_flow_state.dart';
 import '../data/navigation_models.dart';
@@ -16,11 +17,44 @@ class SearchOverlay extends StatefulWidget {
 
   final NavigationFlowController controller;
 
-  @override
-  State<SearchOverlay> createState() => _SearchOverlayState();
-}
+  /// Class buildings first, then the curated list, with each building shown
+  /// once (matched by title or building code) and none that is already in
+  /// [recents].
+  static List<CampusPlace> popularPlaces({
+    required List<CourseClass> classes,
+    required List<CampusPlace> recents,
+  }) {
+    final seen = <String>{};
+    Set<String> keys(CampusPlace place) => {
+      place.title.trim().toLowerCase(),
+      if (place.buildingCode case final code? when code.trim().isNotEmpty)
+        code.trim().toLowerCase(),
+    };
+    for (final place in recents) {
+      seen.addAll(keys(place));
+    }
+    final classPlaces = [
+      for (final course in classes)
+        if (!course.isOnline && course.building.trim().isNotEmpty)
+          CampusPlace(
+            id: 'suggested:class-${course.id}',
+            type: CampusDestinationType.building,
+            title: course.building.trim(),
+            subtitle: 'Your class building · ${course.courseCode}',
+            source: CampusPlace.suggestedSource,
+            outdoorDestination: course.coordinate,
+          ),
+    ];
+    final popular = <CampusPlace>[];
+    for (final place in [...classPlaces, ..._popularLocations]) {
+      final placeKeys = keys(place);
+      if (placeKeys.any(seen.contains)) continue;
+      seen.addAll(placeKeys);
+      popular.add(place);
+    }
+    return popular;
+  }
 
-class _SearchOverlayState extends State<SearchOverlay> {
   // Resolved to the real campus record (by building code) when tapped; see
   // NavigationFlowController.selectPlace.
   static const _popularLocations = <CampusPlace>[
@@ -62,6 +96,11 @@ class _SearchOverlayState extends State<SearchOverlay> {
     ),
   ];
 
+  @override
+  State<SearchOverlay> createState() => _SearchOverlayState();
+}
+
+class _SearchOverlayState extends State<SearchOverlay> {
   final _field = TextEditingController();
   final _focus = FocusNode();
 
@@ -335,25 +374,10 @@ class _SearchOverlayState extends State<SearchOverlay> {
   List<CampusPlace> _popularPlaces() {
     // SearchOverlay is also used standalone in widget tests and embeddable
     // contexts, so class-aware suggestions remain optional.
-    final classes = context.watch<AppState?>()?.classes ?? const [];
-    final classPlaces = <CampusPlace>[];
-    final seen = <String>{};
-    for (final course in classes) {
-      if (course.isOnline || course.building.trim().isEmpty) continue;
-      final key = course.building.trim().toLowerCase();
-      if (!seen.add(key)) continue;
-      classPlaces.add(
-        CampusPlace(
-          id: 'suggested:class-${course.id}',
-          type: CampusDestinationType.building,
-          title: course.building.trim(),
-          subtitle: 'Your class building · ${course.courseCode}',
-          source: CampusPlace.suggestedSource,
-          outdoorDestination: course.coordinate,
-        ),
-      );
-    }
-    return [...classPlaces, ..._popularLocations];
+    return SearchOverlay.popularPlaces(
+      classes: context.watch<AppState?>()?.classes ?? const [],
+      recents: widget.controller.recents,
+    );
   }
 
   Widget _placeTile(CampusPlace place) => CampusSearchResultTile(
