@@ -20,6 +20,10 @@ class ChecklistScreen extends StatefulWidget {
 }
 
 class _ChecklistScreenState extends State<ChecklistScreen> {
+  // Set on the label, not through ButtonStyle.textStyle, which would replace
+  // the theme's label style and drop the brand font.
+  static const _buttonLabel = TextStyle(fontWeight: FontWeight.w700);
+
   DateTime _selectedDate = DateTime.now();
   CalendarView _view = CalendarView.week;
   int _scrollToNowRequest = 0;
@@ -182,9 +186,18 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
       Expanded(
         child: SegmentedButton<CalendarView>(
           segments: const [
-            ButtonSegment(value: CalendarView.week, label: Text('Week')),
-            ButtonSegment(value: CalendarView.day, label: Text('Day')),
-            ButtonSegment(value: CalendarView.agenda, label: Text('Agenda')),
+            ButtonSegment(
+              value: CalendarView.week,
+              label: Text('Week', style: _buttonLabel),
+            ),
+            ButtonSegment(
+              value: CalendarView.day,
+              label: Text('Day', style: _buttonLabel),
+            ),
+            ButtonSegment(
+              value: CalendarView.agenda,
+              label: Text('Agenda', style: _buttonLabel),
+            ),
           ],
           selected: {_view},
           showSelectedIcon: false,
@@ -195,7 +208,6 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
             selectedBackgroundColor: AppColors.petInk,
             selectedForegroundColor: Colors.white,
             side: const BorderSide(color: AppColors.cardBorder),
-            textStyle: const TextStyle(fontWeight: FontWeight.w700),
             visualDensity: VisualDensity.compact,
           ),
         ),
@@ -204,12 +216,11 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
       OutlinedButton.icon(
         onPressed: _goToToday,
         icon: const Icon(Icons.today_outlined, size: 18),
-        label: const Text('Today'),
+        label: const Text('Today', style: _buttonLabel),
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.petInk,
           backgroundColor: Colors.white,
           side: const BorderSide(color: AppColors.petInk),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700),
           visualDensity: VisualDensity.compact,
         ),
       ),
@@ -251,10 +262,9 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
               backgroundColor: AppColors.yellow,
               foregroundColor: AppColors.petInk,
               minimumSize: const Size(0, 40),
-              textStyle: const TextStyle(fontWeight: FontWeight.w700),
             ),
             icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add class'),
+            label: const Text('Add class', style: _buttonLabel),
           ),
         ],
       ),
