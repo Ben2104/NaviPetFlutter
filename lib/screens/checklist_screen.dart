@@ -344,7 +344,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                     overflow: TextOverflow.ellipsis,
                   )
                 : Text(
-                    '${tasks[index].course.startTime} · ${tasks[index].course.courseName}',
+                    '${tasks[index].course.startLabel} · ${tasks[index].course.courseName}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),

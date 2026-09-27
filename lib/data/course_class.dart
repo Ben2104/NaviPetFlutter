@@ -1,5 +1,18 @@
 import 'navigation_models.dart';
 
+/// Formats a database time (`HH:MM` or `HH:MM:SS`) as `10:00 AM`; with
+/// [period] false, just `10:00`.
+String formatClockTime(String value, {bool period = true}) {
+  final parts = value.split(':');
+  final hour = int.tryParse(parts.first) ?? 0;
+  final minute = parts.length > 1 ? parts[1].padLeft(2, '0') : '00';
+  final display = hour % 12 == 0 ? 12 : hour % 12;
+  final label = '$display:$minute';
+  return period ? '$label ${_period(hour)}' : label;
+}
+
+String _period(int hour) => hour % 24 < 12 ? 'AM' : 'PM';
+
 class CourseClass {
   const CourseClass({
     required this.id,
@@ -32,6 +45,19 @@ class CourseClass {
       : room.trim().isEmpty
       ? building
       : '$building $room';
+
+  /// Start time for display, e.g. `10:00 AM`.
+  String get startLabel => formatClockTime(startTime);
+
+  /// `10:00–11:15 AM`, or `11:30 AM–12:45 PM` when the class crosses noon.
+  String get timeRangeLabel {
+    final samePeriod =
+        _period(int.tryParse(startTime.split(':').first) ?? 0) ==
+        _period(int.tryParse(endTime.split(':').first) ?? 0);
+    return samePeriod
+        ? '${formatClockTime(startTime, period: false)}–${formatClockTime(endTime)}'
+        : '${formatClockTime(startTime)}–${formatClockTime(endTime)}';
+  }
 
   NavigationCoordinate get coordinate =>
       NavigationCoordinate(latitude: latitude, longitude: longitude);

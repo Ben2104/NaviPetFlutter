@@ -268,7 +268,7 @@ class ScheduleCalendar extends StatelessWidget {
           ),
           child: Text(
             '${course.courseCode}\n${course.courseName}\n'
-            '${course.startTime}-${course.endTime}\n${course.locationLabel}',
+            '${course.timeRangeLabel}\n${course.locationLabel}',
             maxLines: 8,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
