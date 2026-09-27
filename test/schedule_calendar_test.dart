@@ -22,8 +22,11 @@ Future<void> _pump(
   required List<CourseClass> classes,
   DateTime? selected,
   ValueChanged<DateTime>? onSelectDate,
+  ValueChanged<CourseClass>? onTapClass,
+  CalendarView view = CalendarView.week,
+  DateTime? now,
 }) {
-  final today = DateTime(2026, 9, 23); // a Wednesday
+  final today = now ?? DateTime(2026, 9, 23); // a Wednesday
   return tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
@@ -33,7 +36,8 @@ Future<void> _pump(
             today: today,
             selectedDate: selected ?? today,
             onSelectDate: onSelectDate ?? (_) {},
-            onTapClass: (_) {},
+            onTapClass: onTapClass ?? (_) {},
+            view: view,
           ),
         ),
       ),
@@ -86,5 +90,119 @@ void main() {
       tester.getSemantics(find.text('9/24')),
       isSemantics(isSelected: false),
     );
+  });
+
+  testWidgets('the whole week fits a phone-width screen', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pump(
+      tester,
+      classes: [
+        _course('1', '10:00', '11:15', [1, 7]),
+      ],
+    );
+
+    for (final label in ['9/21', '9/27']) {
+      final rect = tester.getRect(find.text(label));
+      expect(rect.left, greaterThanOrEqualTo(0), reason: label);
+      expect(rect.right, lessThanOrEqualTo(390), reason: label);
+    }
+    final sunday = tester.getRect(find.byKey(const ValueKey('class-1-7')));
+    expect(sunday.right, lessThanOrEqualTo(390));
+  });
+
+  testWidgets('today is announced as today', (tester) async {
+    await _pump(tester, classes: const []);
+    expect(
+      tester.getSemantics(find.text('9/23')),
+      isSemantics(label: 'Today\nWed\n9/23', isSelected: true),
+    );
+  });
+
+  testWidgets('week blocks show the course and start time, not the room', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      classes: [
+        _course('1', '14:00', '15:15', [3]),
+      ],
+    );
+    final block = find.byKey(const ValueKey('class-1-3'));
+    expect(
+      find.descendant(of: block, matching: find.textContaining('CECS 1')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: block, matching: find.textContaining('2:00')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: block, matching: find.textContaining('VEC')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('tapping a block opens that class', (tester) async {
+    CourseClass? tapped;
+    final course = _course('1', '10:00', '11:15', [3]);
+    await _pump(tester, classes: [course], onTapClass: (c) => tapped = c);
+    await tester.tap(find.byKey(const ValueKey('class-1-3')));
+    expect(tapped, course);
+  });
+
+  testWidgets('the grid starts scrolled to the current time', (tester) async {
+    await _pump(tester, classes: const [], now: DateTime(2026, 9, 23, 16, 30));
+    await tester.pump();
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(
+        of: find.byType(ScheduleCalendar),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    // An hour of context above now: 3:30 PM is 7.5 hours after 8 AM.
+    expect(scrollable.position.pixels, greaterThan(0));
+    expect(
+      tester.getRect(find.byKey(ScheduleCalendar.nowLineKey)).top,
+      greaterThan(tester.getRect(find.byType(Scrollable).first).top),
+    );
+  });
+
+  testWidgets('day view shows only the selected day with the class name', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      view: CalendarView.day,
+      selected: DateTime(2026, 9, 21),
+      classes: [
+        _course('1', '10:00', '11:15', [1]),
+        _course('2', '12:00', '13:15', [2]),
+      ],
+    );
+    expect(find.byKey(const ValueKey('class-1-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('class-2-2')), findsNothing);
+    expect(find.textContaining('Course 1'), findsOneWidget);
+    expect(find.textContaining('10:00–11:15 AM'), findsOneWidget);
+  });
+
+  testWidgets('agenda lists each day in order with time ranges', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      view: CalendarView.agenda,
+      classes: [
+        _course('2', '13:00', '14:15', [3]),
+        _course('1', '09:00', '09:50', [3]),
+      ],
+    );
+    expect(find.text('Today · Wed, Sep 23'), findsOneWidget);
+    final first = tester.getRect(find.byKey(const ValueKey('agenda-1-3')));
+    final second = tester.getRect(find.byKey(const ValueKey('agenda-2-3')));
+    expect(first.top, lessThan(second.top));
+    expect(find.text('9:00–9:50 AM'), findsOneWidget);
+    expect(find.text('No classes'), findsNWidgets(6));
   });
 }
