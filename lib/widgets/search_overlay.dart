@@ -46,7 +46,7 @@ class SearchOverlay extends StatefulWidget {
           ),
     ];
     final popular = <CampusPlace>[];
-    for (final place in [...classPlaces, ..._popularLocations]) {
+    for (final place in classPlaces) {
       final placeKeys = keys(place);
       if (placeKeys.any(seen.contains)) continue;
       seen.addAll(placeKeys);
@@ -54,47 +54,6 @@ class SearchOverlay extends StatefulWidget {
     }
     return popular;
   }
-
-  // Resolved to the real campus record (by building code) when tapped; see
-  // NavigationFlowController.selectPlace.
-  static const _popularLocations = <CampusPlace>[
-    CampusPlace(
-      id: 'suggested:HC',
-      type: CampusDestinationType.building,
-      title: 'Steve and Nini Horn Center',
-      subtitle: 'Popular location',
-      source: CampusPlace.suggestedSource,
-      buildingCode: 'HC',
-      outdoorDestination: NavigationCoordinate(
-        latitude: 33.78372,
-        longitude: -118.11482,
-      ),
-    ),
-    CampusPlace(
-      id: 'suggested:COB',
-      type: CampusDestinationType.building,
-      title: 'College of Business',
-      subtitle: 'Popular location',
-      source: CampusPlace.suggestedSource,
-      buildingCode: 'COB',
-      outdoorDestination: NavigationCoordinate(
-        latitude: 33.78326,
-        longitude: -118.11444,
-      ),
-    ),
-    CampusPlace(
-      id: 'suggested:USU',
-      type: CampusDestinationType.building,
-      title: 'University Student Union',
-      subtitle: 'Food, events, services & lounge',
-      source: CampusPlace.suggestedSource,
-      buildingCode: 'USU',
-      outdoorDestination: NavigationCoordinate(
-        latitude: 33.78305,
-        longitude: -118.11278,
-      ),
-    ),
-  ];
 
   @override
   State<SearchOverlay> createState() => _SearchOverlayState();

@@ -93,7 +93,7 @@ class CourseClass {
           : _addHour(startTime),
       latitude: (json['latitude'] as num?)?.toDouble() ?? 33.7838,
       longitude: (json['longitude'] as num?)?.toDouble() ?? -118.1141,
-      isOnline: (json['isOnline'] ?? json['is_online']) == true,
+      isOnline: _asBool(json['isOnline'] ?? json['is_online']),
     );
   }
 }
@@ -162,6 +162,9 @@ String _addHour(String value) {
   final endMinute = (totalMinutes % 60).toString().padLeft(2, '0');
   return '$endHour:$endMinute';
 }
+
+bool _asBool(Object? value) =>
+    value == true || value?.toString().toLowerCase() == 'true';
 
 class DailyClassTask {
   const DailyClassTask({
