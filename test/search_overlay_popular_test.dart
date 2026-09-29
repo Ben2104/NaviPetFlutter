@@ -61,9 +61,7 @@ void main() {
         _recent('VEC'),
       ],
     );
-    expect(_titles(places), [
-      'College of Business',
-      'University Student Union',
-    ]);
+    // Only class buildings are suggested, and VEC is already a recent search.
+    expect(_titles(places), isEmpty);
   });
 }
