@@ -7,7 +7,6 @@ import '../data/campus_search_controller.dart';
 import '../data/course_class.dart';
 import '../data/navigation_flow_controller.dart';
 import '../data/navigation_flow_state.dart';
-import '../data/navigation_models.dart';
 import '../theme/app_theme.dart';
 import 'campus_search_result_tile.dart';
 
