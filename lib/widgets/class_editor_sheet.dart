@@ -102,10 +102,7 @@ class _ClassEditorSheetState extends State<ClassEditorSheet> {
       // treats it as a location because isOnline remains true.
       var coordinate =
           widget.course?.coordinate ??
-          const NavigationCoordinate(
-            latitude: csulbLat,
-            longitude: csulbLng,
-          );
+          const NavigationCoordinate(latitude: csulbLat, longitude: csulbLng);
       // Online classes have no campus location to geocode.
       if (!_isOnline) {
         // Geocoding improves the pin, but it must not prevent a class from
