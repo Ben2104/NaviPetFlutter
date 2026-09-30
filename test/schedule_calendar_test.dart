@@ -46,14 +46,14 @@ Future<void> _pump(
 }
 
 void main() {
-  test('the visible hours grow to fit early and evening classes', () {
-    expect(ScheduleCalendar.hourRange(const []), (startHour: 8, endHour: 19));
+  test('the visible hours always span the full day', () {
+    expect(ScheduleCalendar.hourRange(const []), (startHour: 0, endHour: 24));
     expect(
       ScheduleCalendar.hourRange([
         _course('1', '07:00:00', '07:50:00', [1]),
         _course('2', '19:00:00', '21:45:00', [2]),
       ]),
-      (startHour: 7, endHour: 22),
+      (startHour: 0, endHour: 24),
     );
   });
 
@@ -153,6 +153,9 @@ void main() {
     CourseClass? tapped;
     final course = _course('1', '10:00', '11:15', [3]);
     await _pump(tester, classes: [course], onTapClass: (c) => tapped = c);
+    // The full-day grid scrolls, so bring the block into view before tapping.
+    await tester.ensureVisible(find.byKey(const ValueKey('class-1-3')));
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('class-1-3')));
     expect(tapped, course);
   });

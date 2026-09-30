@@ -54,6 +54,10 @@ class _ClassEditorSheetState extends State<ClassEditorSheet> {
             minute: int.parse(endParts[1]),
           );
     _isOnline = course?.isOnline ?? false;
+    if (_isOnline) {
+      _building.clear();
+      _room.clear();
+    }
   }
 
   @override
@@ -93,6 +97,9 @@ class _ClassEditorSheetState extends State<ClassEditorSheet> {
     setState(() => _saving = true);
     final service = MapboxNavigationService(accessToken: mapboxPublicToken);
     try {
+      // The Supabase class table keeps a coordinate for every row. Online
+      // classes use a harmless campus fallback internally, but the app never
+      // treats it as a location because isOnline remains true.
       var coordinate =
           widget.course?.coordinate ??
           const NavigationCoordinate(latitude: csulbLat, longitude: csulbLng);
@@ -128,9 +135,11 @@ class _ClassEditorSheetState extends State<ClassEditorSheet> {
       await context.read<AppState>().saveClass(
         CourseClassInput(
           id: widget.course?.id,
-          courseCode: _code.text,
+          courseCode: _isOnline && _code.text.trim().isEmpty
+              ? _name.text
+              : _code.text,
           courseName: _name.text,
-          building: _building.text,
+          building: _isOnline ? 'Online' : _building.text,
           room: _room.text,
           weekdays: _weekdays.toList()..sort(),
           startTime: _databaseTime(_time),
@@ -188,24 +197,25 @@ class _ClassEditorSheetState extends State<ClassEditorSheet> {
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(child: _field(_code, 'Course code', 'CS 328')),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _field(_room, 'Room', '518', required: false),
-                  ),
-                ],
-              ),
+              if (!_isOnline)
+                Row(
+                  children: [
+                    Expanded(child: _field(_code, 'Course code', 'CS 328')),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _field(_room, 'Room', '518', required: false),
+                    ),
+                  ],
+                ),
               const SizedBox(height: 12),
               _field(_name, 'Class name', 'Software Engineering'),
               const SizedBox(height: 12),
-              _field(
-                _building,
-                'Building or address',
-                'Vivian Engineering Center',
-                required: !_isOnline,
-              ),
+              if (!_isOnline)
+                _field(
+                  _building,
+                  'Building or address',
+                  'Vivian Engineering Center',
+                ),
               const SizedBox(height: 12),
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
@@ -217,7 +227,13 @@ class _ClassEditorSheetState extends State<ClassEditorSheet> {
                 ),
                 value: _isOnline,
                 activeThumbColor: AppColors.petInk,
-                onChanged: (value) => setState(() => _isOnline = value),
+                onChanged: (value) => setState(() {
+                  _isOnline = value;
+                  if (value) {
+                    _building.clear();
+                    _room.clear();
+                  }
+                }),
               ),
               const SizedBox(height: 16),
               const Text(

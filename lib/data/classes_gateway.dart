@@ -65,6 +65,7 @@ class HttpClassesGateway implements ClassesGateway {
       accessToken: accessToken,
       body: input.toApiJson(),
       expectedStatus: 201,
+      alsoAccept: 200,
     );
     return _classFromMutation(response);
   }
@@ -103,6 +104,7 @@ class HttpClassesGateway implements ClassesGateway {
     required String accessToken,
     Map<String, dynamic>? body,
     int expectedStatus = 200,
+    int? alsoAccept,
   }) async {
     try {
       final request = http.Request(method, Uri.parse('$baseUrl$path'))
@@ -118,7 +120,10 @@ class HttpClassesGateway implements ClassesGateway {
           .send(request)
           .then(http.Response.fromStream)
           .timeout(_timeout);
-      if (response.statusCode != expectedStatus) throw _errorFrom(response);
+      if (response.statusCode != expectedStatus &&
+          response.statusCode != alsoAccept) {
+        throw _errorFrom(response);
+      }
       return response;
     } on TimeoutException {
       throw const ClassesApiException(
@@ -140,11 +145,16 @@ class HttpClassesGateway implements ClassesGateway {
   }
 
   ClassesApiException _errorFrom(http.Response response) {
-    final error = _decode(response)?['error'];
+    final body = _decode(response);
+    final error = body?['error'];
+    final message = error is Map && error['message'] != null
+        ? error['message'].toString()
+        : body?['message']?.toString();
     return ClassesApiException(
-      message: error is Map && error['message'] != null
-          ? error['message'].toString()
-          : 'The NaviPet server could not complete the class request.',
+      message: message != null
+          ? '$message (HTTP ${response.statusCode})'
+          : 'The NaviPet server could not complete the class request '
+                '(HTTP ${response.statusCode}).',
       statusCode: response.statusCode,
     );
   }

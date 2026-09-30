@@ -50,6 +50,7 @@ class NavigationFlowController extends ChangeNotifier {
   List<CampusPlace> _recents = const [];
   String? _locationNotice;
   Future<void> _localRecentsReady = Future.value();
+  int _recentRevision = 0;
   int _generation = 0;
   int _resumeGeneration = 0;
 
@@ -186,6 +187,7 @@ class NavigationFlowController extends ChangeNotifier {
     _generation++;
     _resumeGeneration++;
     _recents = const [];
+    _recentRevision++;
     _locationNotice = null;
     _localRecentsReady = recentSearches.clearLocal().catchError((_) {
       // Recents are a convenience. A local-storage failure must not block
@@ -234,11 +236,21 @@ class NavigationFlowController extends ChangeNotifier {
 
   Future<void> loadRecents() async {
     final generation = _generation;
+    final revision = _recentRevision;
     try {
       await _localRecentsReady;
       final loaded = await recentSearches.list();
-      if (generation != _generation) return;
-      _recents = loaded;
+      // A list request can finish after a selection was saved. Do not let
+      // that stale response overwrite the just-added local recent.
+      if (generation != _generation || revision != _recentRevision) return;
+      // The server may briefly lag behind the save. Keep local selections at
+      // the front and add any server-only entries after them.
+      _recents = [
+        ..._recents,
+        ...loaded.where(
+          (remote) => !_recents.any((local) => local.id == remote.id),
+        ),
+      ].take(3).toList(growable: false);
       notifyListeners();
     } on Object {
       // Recents are a convenience; a failure must never block searching.
@@ -246,6 +258,7 @@ class NavigationFlowController extends ChangeNotifier {
   }
 
   Future<void> clearRecents() async {
+    _recentRevision++;
     await recentSearches.clear();
     _recents = const [];
     notifyListeners();
@@ -258,6 +271,22 @@ class NavigationFlowController extends ChangeNotifier {
       FlowSearching(:final query) => query,
       _ => '',
     };
+
+    // Move to the preview immediately. Suggestion resolution may require a
+    // network round trip; waiting for it leaves the search sheet visible and
+    // makes popular-location taps appear unresponsive while the keyboard is
+    // open.
+    if (requestState is FlowSearching && !requestState.pickingOrigin) {
+      _set(
+        FlowPlacePreview(
+          place: place,
+          destination: place.outdoorDestination == null
+              ? null
+              : place.toDestination(),
+          previousQuery: query,
+        ),
+      );
+    }
 
     // Local records are re-resolved so the preview shows current data.
     var resolved = place;
@@ -365,7 +394,8 @@ class NavigationFlowController extends ChangeNotifier {
   }
 
   void _rememberRecent(CampusPlace place) {
-    if (place.external || place.outdoorDestination == null) return;
+    if (place.external) return;
+    _recentRevision++;
     _recents = [
       place,
       ..._recents.where((item) => item.id != place.id),

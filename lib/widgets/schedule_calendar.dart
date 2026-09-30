@@ -40,21 +40,16 @@ class ScheduleCalendar extends StatefulWidget {
   static const gridKey = ValueKey('schedule-grid');
   static const nowLineKey = ValueKey('schedule-now');
 
-  static const _defaultStartHour = 8;
-  static const _defaultEndHour = 19;
+  static const _defaultStartHour = 0;
+  static const _defaultEndHour = 24;
 
-  /// The hour span the grid shows: at least 8 AM–7 PM, widened to the
-  /// whole hours covering every class.
+  /// The hour span the grid shows: the complete 24-hour day.
   static ({int startHour, int endHour}) hourRange(
     Iterable<CourseClass> classes,
   ) {
-    var start = _defaultStartHour;
-    var end = _defaultEndHour;
-    for (final course in classes) {
-      start = math.min(start, _minutes(course.startTime) ~/ 60);
-      end = math.max(end, (_minutes(course.endTime) / 60).ceil());
-    }
-    return (startHour: start, endHour: math.min(end, 24));
+    // Keep a consistent full-day grid even when the schedule is empty or
+    // contains only daytime classes.
+    return (startHour: _defaultStartHour, endHour: _defaultEndHour);
   }
 
   static int _minutes(String value) {
